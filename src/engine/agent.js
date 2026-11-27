@@ -29,6 +29,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const withTimeout = (p, ms) => Promise.race([p, sleep(ms).then(() => null)]);
 const quiet = (p) => p.catch(() => null);
 
+function hashText(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
+}
+
 export function shortUrl(url) {
   try {
     const u = new URL(url);
@@ -227,7 +236,10 @@ export class Agent {
         ...origin,
       });
     }
-    if (isMutationMethod(meta.method) && status >= 200 && status < 300 && !isTelemetryUrl(meta.url)) this.checkDuplicate(meta, status, duration);
+    if (isMutationMethod(meta.method) && status >= 200 && status < 300 && !isTelemetryUrl(meta.url)) {
+      // The response body tells a real duplicate (new order id) from an idempotent replay (same answer).
+      quiet(res.text()).then((body) => this.checkDuplicate(meta, status, duration, body === null ? null : hashText(body)));
+    }
     if (['fetch', 'xhr'].includes(meta.type) && status < 400 && this.bodyScans < MAX_BODY_SCANS) this.scanBody(res, meta);
   }
 
@@ -258,14 +270,16 @@ export class Agent {
     );
   }
 
-  checkDuplicate(meta, status, duration) {
+  checkDuplicate(meta, status, duration, bodyHash = null) {
     const urlNoQuery = meta.url.split('?')[0];
     const key = `${meta.method} ${urlNoQuery} ${meta.postData || ''}`;
     // Only requests born from the same impatient burst count; two deliberate actions are not a double submit.
     const fresh = (this.dupGroups.get(key) || []).filter((e) => e.seq === meta.seq && meta.ts - e.ts < DUPLICATE_WINDOW_MS);
-    const group = [...fresh, { ts: meta.ts, status, duration, seq: meta.seq, actionLabel: meta.actionLabel }];
+    const group = [...fresh, { ts: meta.ts, status, duration, seq: meta.seq, actionLabel: meta.actionLabel, bodyHash }];
     this.dupGroups.set(key, group);
     if (group.length < 2) return;
+    const replayed = group.every((g) => g.bodyHash !== null && g.bodyHash === group[0].bodyHash);
+    if (replayed) return;
     const money = MONEY.test(urlNoQuery) || MONEY.test(meta.postData || '');
     const first = group[0].ts;
     this.report({

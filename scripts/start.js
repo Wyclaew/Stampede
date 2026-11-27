@@ -19,7 +19,7 @@ async function main() {
   const dash = await startDashboard({ demoUrl: demo.url });
   const out = [
     '',
-    '  👻  Stampede hazır',
+    '  Stampede hazır',
     '',
     `  Dashboard      ${dash.url}`,
     `  Demo (hatalı)  ${demo.url}`,
@@ -40,6 +40,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`\n❌ ${err.message}\n`);
+  process.stderr.write(`\nHata: ${err.message}\n`);
   process.exit(1);
 });

@@ -8,18 +8,21 @@ import { StampedeSession } from '../src/engine/session.js';
 import { SEVERITY_ORDER, SEVERITY_LABEL } from '../src/engine/issues.js';
 import { writeReport } from '../src/report/index.js';
 import { REPORTS_DIR } from '../src/server/index.js';
+import { PERSONA_ORDER } from '../src/engine/personas.js';
 
 const C = { red: '\x1b[31m', yellow: '\x1b[33m', blue: '\x1b[36m', magenta: '\x1b[35m', dim: '\x1b[2m', bold: '\x1b[1m', reset: '\x1b[0m', orange: '\x1b[38;5;208m' };
 const SEV_COLOR = { critical: C.red, high: C.orange, medium: C.yellow, low: C.blue };
 
 const HELP = `
-👻 Stampede — Sabırsız Hayalet Kullanıcı
+Stampede: sabırsız kullanıcı sürüsü
 
 Kullanım:
   stampede run <url> [seçenekler]
 
 Seçenekler:
   --mode <safe|chaos|stress>  Varsayılan: safe (canlı siteler için güvenli)
+  --personas <liste|all>      rage,keyboard,mobile,snoop (varsayılan: rage). all = dört ajan
+  --email / --password        Giriş/kayıt formları için test kimliği (yoksa otomatik üretilir)
   --duration <sn>             Çalışma süresi, varsayılan 60
   --seed <sayı>               Aynı senaryoyu tekrar oynatmak için
   --headed                    Tarayıcı penceresini göster
@@ -43,6 +46,11 @@ export function parseArgs(argv) {
       return v;
     };
     if (a === '--mode') opts.mode = next();
+    else if (a === '--personas') {
+      const v = next();
+      opts.personas = v === 'all' ? [...PERSONA_ORDER] : v.split(',').map((x) => x.trim()).filter(Boolean);
+    } else if (a === '--email') opts.email = next();
+    else if (a === '--password') opts.password = next();
     else if (a === '--duration') opts.durationSec = Number(next());
     else if (a === '--seed') opts.seed = Number(next());
     else if (a === '--headed') opts.headed = true;
@@ -62,13 +70,15 @@ async function main() {
     process.exit(argv.length && argv[0] !== '--help' && argv[0] !== '-h' ? 2 : 0);
   }
   const opts = parseArgs(argv);
-  const session = new StampedeSession({ url: opts.url, mode: opts.mode, durationSec: opts.durationSec, seed: opts.seed, headed: opts.headed, confirmLive: opts.confirmLive });
-  process.stdout.write(`\n👻 ${C.bold}Stampede${C.reset} → ${opts.url}  ${C.dim}(${session.mode.label}, ${session.config.durationSec} sn, seed ${session.config.seed})${C.reset}\n\n`);
+  const credentials = opts.email || opts.password ? { email: opts.email, password: opts.password } : undefined;
+  const session = new StampedeSession({ url: opts.url, mode: opts.mode, durationSec: opts.durationSec, seed: opts.seed, headed: opts.headed, confirmLive: opts.confirmLive, personas: opts.personas, credentials });
+  const agents = session.personas.map((p) => `${p.code} ${p.label}`).join(', ');
+  process.stdout.write(`\n${C.bold}Stampede${C.reset} → ${opts.url}  ${C.dim}(${session.mode.label}, ${session.config.durationSec} sn, seed ${session.config.seed})${C.reset}\n${C.dim}Ajanlar: ${agents}${C.reset}\n\n`);
   process.on('SIGINT', () => session.stop());
   session.on('issue', ({ issue, isNew }) => {
     if (!isNew) return;
     const col = SEV_COLOR[issue.severity];
-    process.stdout.write(`  ${col}■ ${SEVERITY_LABEL[issue.severity].padEnd(6)}${C.reset} ${C.bold}${issue.title}${C.reset} ${C.dim}— ${issue.detail.slice(0, 110)}${C.reset}\n`);
+    process.stdout.write(`  ${col}■ ${SEVERITY_LABEL[issue.severity].padEnd(6)}${C.reset} ${C.dim}${issue.agentCode || ''}${C.reset} ${C.bold}${issue.title}${C.reset} ${C.dim}— ${issue.detail.slice(0, 110)}${C.reset}\n`);
   });
   session.on('action', (a) => {
     if (a.phase === 'done' && a.seq % 10 === 0) process.stdout.write(`  ${C.dim}… ${a.seq} aksiyon${C.reset}\n`);
@@ -79,7 +89,7 @@ async function main() {
   process.stdout.write(
     `\n${C.bold}Skor ${report.score}/100 (${report.grade.grade})${C.reset}  ${C.red}${c.critical} kritik${C.reset} · ${C.orange}${c.high} yüksek${C.reset} · ${C.yellow}${c.medium} orta${C.reset} · ${C.blue}${c.low} düşük${C.reset}\n` +
       `${report.stats.actions} aksiyon, ${report.stats.clicks} tık, ${report.stats.requests} istek\n\n` +
-      `📄 ${written.files.html}\n🧪 ${written.files.spec}\n\n`,
+      `Rapor:   ${written.files.html}\nTestler: ${written.files.spec}\n\n`,
   );
   if (opts.failOn) {
     const limit = SEVERITY_ORDER.indexOf(opts.failOn);
@@ -99,7 +109,7 @@ const invokedDirectly = (() => {
 
 if (invokedDirectly) {
   main().catch((err) => {
-    process.stderr.write(`\n❌ ${err.message}\n`);
+    process.stderr.write(`\nHata: ${err.message}\n`);
     process.exit(2);
   });
 }

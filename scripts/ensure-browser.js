@@ -7,7 +7,7 @@ async function main() {
     const { chromium } = await import('playwright');
     const browser = await chromium.launch();
     await browser.close();
-    process.stdout.write('Stampede: Chromium hazır ✓\n');
+    process.stdout.write('Stampede: Chromium hazır\n');
   } catch {
     process.stdout.write('Stampede: Chromium indiriliyor (tek seferlik)…\n');
     const r = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'install', 'chromium'], { stdio: 'inherit' });

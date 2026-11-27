@@ -3,116 +3,141 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stampede · Sabırsız Hayalet Kullanıcı</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
+  <title>Stampede · sabırsız kullanıcı sürüsü</title>
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b1015'/><path d='M7 6v14l4-3.5 2.6 6 2.6-1.1-2.6-5.9H19z' fill='%235aea98'/><path d='M17 4v9l2.6-2.3 1.7 3.9 1.7-.7-1.7-3.8H25z' fill='%2374aef5'/></svg>">
+  <link rel="preload" href="/vendor/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <div class="logo" aria-hidden="true">👻</div>
-      <div>
-        <h1>Rage<span>Ghost</span></h1>
-        <p>Sabırsız Hayalet Kullanıcı · uygulamanızı en sabırsız insan gibi kırar, hatayı tekrar üretilebilir rapora çevirir</p>
-      </div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 1.8 13 3.6v4c0 3.2-2.1 5.6-5 6.6-2.9-1-5-3.4-5-6.6v-4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chaos" viewBox="0 0 16 16"><path d="M1.5 9.5 4.5 4l3 8 3-8 4 5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-stress" viewBox="0 0 16 16"><path d="M8 2 14.5 13.5h-13z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.6v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.8h5.3L12.5 5v9.2h-8.5z M9 1.8V5.3h3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-code" viewBox="0 0 16 16"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  </svg>
+
+  <header class="bar">
+    <a class="brand" href="/" aria-label="Stampede">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 5v15l4.2-3.7 2.7 6.2 2.7-1.2-2.7-6.1H19z" fill="var(--signal)"/><path d="M17 3v9.5l2.7-2.4 1.8 4 1.8-.8-1.8-3.9H26z" fill="#74aef5"/></svg>
+      <span class="word">Stampede</span>
+    </a>
+    <p class="tagline">Uygulamanıza aynı anda dört farklı sabırsız kullanıcı saldırır. Kırılan her şey, tekrar üretilebilir bir teste dönüşür.</p>
+    <div class="run-state" id="runState" data-phase="idle">
+      <span class="state-label" id="stateLabel">Hazır</span>
+      <span class="clock mono" id="clock">00:00</span>
     </div>
-    <div class="conn" id="conn"><span class="dot"></span><span id="connText">Bağlanıyor…</span></div>
   </header>
 
-  <section class="controls" aria-label="Çalıştırma ayarları">
-    <div class="row">
-      <label class="field grow">
-        <span>Hedef URL</span>
-        <input id="url" type="url" value="http://localhost:7500/" spellcheck="false" autocomplete="off">
+  <main class="layout">
+    <section class="setup panel" aria-labelledby="setup-title">
+      <h2 id="setup-title">Görev</h2>
+      <label class="field">
+        <span class="label">Hedef adres</span>
+        <input id="url" class="mono" type="url" value="http://localhost:7500/" spellcheck="false" autocomplete="off">
       </label>
-      <div class="presets">
-        <button class="chip-btn" data-url="http://localhost:7500/">🐞 Demo (hatalı)</button>
-        <button class="chip-btn" data-url="http://localhost:7500/?fixed=1">✅ Demo (düzeltilmiş)</button>
-        <button class="chip-btn" data-url="https://biyom.co/" data-mode="safe">🌐 biyom.co</button>
+      <div class="quick" role="group" aria-label="Hazır hedefler">
+        <button type="button" class="link-btn" data-url="http://localhost:7500/">Demo · hatalı</button>
+        <button type="button" class="link-btn" data-url="http://localhost:7500/?fixed=1">Demo · düzeltilmiş</button>
+        <button type="button" class="link-btn" data-url="https://biyom.co/" data-mode="safe">biyom.co</button>
       </div>
-    </div>
-    <div class="row">
-      <div class="modes" role="radiogroup" aria-label="Mod">
-        <label class="mode safe"><input type="radio" name="mode" value="safe"><b>🛡️ Güvenli Keşif</b><small>Canlı siteler için. POST/PUT/DELETE engellenir, ödeme/sil butonlarına dokunmaz.</small></label>
-        <label class="mode chaos"><input type="radio" name="mode" value="chaos" checked><b>🌪️ Tam Kaos</b><small>Lokal/staging. Çift tık, form spam, geri/ileri, kaotik girdi.</small></label>
-        <label class="mode stress"><input type="radio" name="mode" value="stress"><b>💥 Stres / Yıkım</b><small>Sadece lokal. ×8 tık, CPU yavaşlatma, Wi-Fi kopması.</small></label>
-      </div>
-      <div class="side-fields">
-        <label class="field"><span>Süre</span>
+
+      <fieldset class="group">
+        <legend class="label">Mod</legend>
+        <div class="modes">
+          <label class="mode"><input type="radio" name="mode" value="safe"><svg><use href="#i-shield"/></svg><span><b>Güvenli keşif</b><small>Canlı site. Yazma istekleri engellenir.</small></span></label>
+          <label class="mode"><input type="radio" name="mode" value="chaos" checked><svg><use href="#i-chaos"/></svg><span><b>Tam kaos</b><small>Lokal ve staging. Gerçek gönderimler.</small></span></label>
+          <label class="mode"><input type="radio" name="mode" value="stress"><svg><use href="#i-stress"/></svg><span><b>Stres</b><small>Sadece lokal. CPU, ağ, API bozma.</small></span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="label">Sürü</legend>
+        <div class="personas" id="personaPicker"></div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend class="label">Test kimliği <span class="hint">giriş/kayıt formlarına yazılır</span></legend>
+        <div class="row2">
+          <input id="email" type="email" autocomplete="off" placeholder="otomatik üretilir" aria-label="Test e-postası">
+          <input id="password" type="password" autocomplete="new-password" placeholder="otomatik" aria-label="Test şifresi">
+        </div>
+        <p class="note">Google, Apple ve diğer “… ile giriş” butonlarına hiç basılmaz. Şifre raporlarda maskelenir.</p>
+      </fieldset>
+
+      <div class="row2">
+        <label class="field"><span class="label">Süre</span>
           <select id="duration"><option value="20">20 sn</option><option value="30">30 sn</option><option value="45" selected>45 sn</option><option value="60">60 sn</option><option value="120">2 dk</option><option value="300">5 dk</option></select>
         </label>
-        <label class="field"><span>Seed</span><input id="seed" type="number" placeholder="rastgele" inputmode="numeric"></label>
-        <label class="toggle"><input id="headed" type="checkbox"><span>Gerçek tarayıcı penceresi</span></label>
+        <label class="field"><span class="label">Seed</span><input id="seed" class="mono" type="number" inputmode="numeric" placeholder="rastgele"></label>
       </div>
-    </div>
-    <label class="live-confirm" id="liveConfirm" hidden>
-      <input id="confirmLive" type="checkbox">
-      <span>⚠️ Bu canlı bir site. Seçilen mod gerçek sipariş/form/ödeme isteği gönderebilir. <b>Sitenin sahibiyim ve buna izin veriyorum.</b></span>
-    </label>
-    <div class="row actions">
-      <button id="start" class="primary">👻 Hayaleti Salıver</button>
-      <button id="stop" class="danger" disabled>■ Durdur</button>
+      <label class="check"><input id="headed" type="checkbox"><span>Tarayıcı pencerelerini de göster</span></label>
+      <label class="consent" id="liveConfirm" hidden>
+        <input id="confirmLive" type="checkbox">
+        <span>Bu canlı bir site ve seçili mod gerçek sipariş, form ve giriş isteği gönderebilir. <b>Sitenin sahibiyim, izin veriyorum.</b></span>
+      </label>
+      <div class="actions">
+        <button id="start" class="primary" type="button"><svg><use href="#i-play"/></svg>Sürüyü başlat</button>
+        <button id="stop" class="secondary" type="button" disabled><svg><use href="#i-stop"/></svg>Durdur</button>
+      </div>
       <p id="formError" class="form-error" role="alert"></p>
-    </div>
-  </section>
-
-  <main class="stage">
-    <section class="viewer" aria-label="Canlı görüntü">
-      <div class="browser-bar">
-        <span class="lights"><i></i><i></i><i></i></span>
-        <span class="addr" id="addr">—</span>
-        <span class="vp" id="vp">1280×800</span>
-      </div>
-      <div class="screen" id="screen">
-        <img id="frame" alt="Hedef sayfanın canlı görüntüsü" hidden>
-        <div class="idle" id="idle">
-          <div class="big-ghost">👻</div>
-          <h2>Hayalet hazır.</h2>
-          <p>Bir URL seçin ve <b>Hayaleti Salıver</b>'e basın. Hayalet sayfayı kendi keşfeder; kaynak koda ihtiyaç yok.</p>
-        </div>
-      </div>
-      <div class="hud">
-        <div class="ticker" id="ticker">Bekleniyor…</div>
-        <div class="progress"><div id="progress"></div></div>
-      </div>
     </section>
 
-    <aside class="side">
-      <div class="scoreboard">
-        <div class="gauge">
-          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" class="track"/><circle cx="60" cy="60" r="50" class="value" id="gaugeArc"/></svg>
-          <div class="gauge-text"><b id="score">100</b><small id="grade">Dayanıklılık</small></div>
-        </div>
-        <div class="sev-grid">
-          <div class="sev critical"><b id="cCritical">0</b><small>Kritik</small></div>
-          <div class="sev high"><b id="cHigh">0</b><small>Yüksek</small></div>
-          <div class="sev medium"><b id="cMedium">0</b><small>Orta</small></div>
-          <div class="sev low"><b id="cLow">0</b><small>Düşük</small></div>
-        </div>
+    <section class="swarm" aria-labelledby="swarm-title">
+      <div class="section-head">
+        <h2 id="swarm-title">Sürü</h2>
+        <p class="sub" id="swarmSub">Ajan seçin ve başlatın. Her ajan ayrı bir sekmede kendi kullanıcı tipini oynar.</p>
       </div>
-      <div class="stats">
-        <div><b id="sActions">0</b><small>aksiyon</small></div>
-        <div><b id="sClicks">0</b><small>tık</small></div>
-        <div><b id="sRequests">0</b><small>istek</small></div>
-        <div><b id="sBlocked">0</b><small>engellenen</small></div>
-        <div><b id="sPages">0</b><small>sayfa</small></div>
+      <div class="tiles" id="tiles" data-count="0"></div>
+
+      <article class="brain panel" aria-labelledby="brain-title">
+        <div class="section-head">
+          <h2 id="brain-title">Karar grafiği</h2>
+          <p class="sub" id="brainSub">Seçili ajanın gördüğü bölgeler, tarttığı hamleler ve sonuçları.</p>
+        </div>
+        <canvas id="brain" height="300" aria-label="Seçili ajanın karar grafiği"></canvas>
+        <p class="brain-caption mono" id="brainCaption">Henüz karar yok.</p>
+      </article>
+    </section>
+
+    <section class="findings" aria-labelledby="score-title">
+      <div class="panel score-panel">
+        <div class="score-head">
+          <h2 id="score-title">Dayanıklılık</h2>
+          <span class="grade" id="grade">—</span>
+        </div>
+        <div class="score-row">
+          <b class="score mono" id="score">100</b>
+          <svg class="history" id="history" viewBox="0 0 160 40" preserveAspectRatio="none" aria-label="Skor geçmişi"><polyline id="historyLine" fill="none" stroke="currentColor" stroke-width="1.5" points="0,4 160,4"/></svg>
+        </div>
+        <ul class="sev-counts" id="sevCounts"></ul>
+        <ul class="cats" id="cats"></ul>
+        <dl class="stats mono" id="stats"></dl>
       </div>
 
-      <div class="done" id="done" hidden>
-        <div><b>Rapor hazır</b><small id="doneText"></small></div>
-        <div class="done-links" id="doneLinks"></div>
+      <div class="panel report-panel" id="reportPanel" hidden>
+        <h2>Rapor</h2>
+        <p class="sub" id="reportText"></p>
+        <div class="report-links" id="reportLinks"></div>
       </div>
 
-      <nav class="tabs" role="tablist">
-        <button role="tab" class="active" data-tab="issues">Sorunlar <span id="tIssues">0</span></button>
-        <button role="tab" data-tab="feed">Canlı akış</button>
-        <button role="tab" data-tab="anoms">Ağ &amp; Konsol <span id="tAnoms">0</span></button>
-      </nav>
-      <div class="panel" id="panel-issues"><p class="placeholder">Henüz sorun yok. Hayalet sabırsızlanıyor…</p></div>
-      <div class="panel" id="panel-feed" hidden></div>
-      <div class="panel" id="panel-anoms" hidden></div>
-    </aside>
+      <div class="panel list-panel">
+        <nav class="tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="issues">Sorunlar <span class="count" id="tIssues">0</span></button>
+          <button role="tab" aria-selected="false" data-tab="feed">Hamleler</button>
+          <button role="tab" aria-selected="false" data-tab="anoms">Ağ ve konsol <span class="count" id="tAnoms">0</span></button>
+        </nav>
+        <div class="list" id="panel-issues"><p class="empty">Bulunan sorunlar burada, önem sırasına göre listelenir.</p></div>
+        <div class="list" id="panel-feed" hidden></div>
+        <div class="list" id="panel-anoms" hidden></div>
+      </div>
+    </section>
   </main>
+
   <script src="/app.js" type="module"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { stripTypeScriptTypes } from 'node:module';
 import { reproTest, reproSpec } from '../../src/report/repro.js';
 import { renderHtml } from '../../src/report/html.js';
 import { renderMarkdown } from '../../src/report/index.js';
@@ -22,11 +23,31 @@ const report = (issues) => ({
   counts: { critical: 1, high: 0, medium: 0, low: 0 }, score: 75, grade: { grade: 'C', label: 'x' }, issues, actions: [], anomalies: [],
 });
 
-test('generated Playwright repro is syntactically valid JavaScript', () => {
-  const types = ['double-submit', 'js-exception', 'layout-overflow', 'garbage-render', 'stuck-spinner', 'xss', 'server-error', 'ui-freeze', 'dead-click'];
+const EVERY_STEP = [
+  step(),
+  step({ seq: 2, kind: 'type', value: "it's \"quoted\"", label: 'yaz', locator: "page.locator('#coupon')", enterTwice: true }),
+  step({ seq: 3, kind: 'backForward', sequence: ['back', 'forward'] }),
+  step({ seq: 4, kind: 'keyActivate', key: 'Enter', count: 3 }),
+  step({ seq: 5, kind: 'tabWalk', presses: 7 }),
+  step({ seq: 6, kind: 'offlineBurst' }),
+  step({ seq: 7, kind: 'sleepWake' }),
+  step({ seq: 8, kind: 'slowNet' }),
+  step({ seq: 9, kind: 'idTamper', to: 'http://localhost:7500/orders/0' }),
+  step({ seq: 10, kind: 'hiddenTamper', changes: [{ name: 'price', to: '0' }], submitted: true }),
+  step({ seq: 11, kind: 'storageCorrupt' }),
+  step({ seq: 12, kind: 'storageFlood' }),
+  step({ seq: 13, kind: 'login', email: 'a@b.test', idLocator: 'x', submitText: 'Giriş yap', submitCount: 2 }),
+  step({ seq: 14, kind: 'twinTab', twinLocator: "page.getByRole('button', { name: 'Öde' }).first()" }),
+  step({ seq: 15, kind: 'rageClick', squeezeTo: [{ width: 375, height: 667 }] }),
+  step({ seq: 16, kind: 'escapeSpam', keys: ['Escape'] }),
+];
+
+test('generated Playwright repro is valid TypeScript for every issue type and move', () => {
+  const types = ['double-submit', 'js-exception', 'fragile-api', 'data-leak', 'layout-overflow', 'garbage-render', 'stuck-spinner', 'xss', 'server-error', 'ui-freeze', 'focus-invisible', 'dead-click'];
   for (const type of types) {
-    const code = reproTest(issue({ type, token: 'NaN' }), report([]));
-    assert.doesNotThrow(() => new Function('test', 'expect', code), `${type} repro must compile`);
+    const code = reproTest(issue({ type, token: 'NaN', steps: EVERY_STEP }), report([]));
+    const js = stripTypeScriptTypes(code);
+    assert.doesNotThrow(() => new Function('test', 'expect', 'process', js), `${type} repro must compile`);
   }
   assert.match(reproTest(issue(), report([])), /expect\(mutations\.length\)\.toBeLessThanOrEqual\(1\)/);
 });
@@ -55,7 +76,11 @@ test('locators prefer stable, human-readable selectors', () => {
 });
 
 test('run request validation at the API boundary', () => {
-  assert.deepEqual(parseRunRequest({ url: 'http://localhost:7500', mode: 'chaos', durationSec: 30 }), { url: 'http://localhost:7500', mode: 'chaos', durationSec: 30, seed: undefined, headed: false, confirmLive: false });
+  assert.deepEqual(parseRunRequest({ url: 'http://localhost:7500', mode: 'chaos', durationSec: 30 }), { url: 'http://localhost:7500', mode: 'chaos', durationSec: 30, seed: undefined, headed: false, confirmLive: false, personas: ['rage'], credentials: undefined });
+  assert.deepEqual(parseRunRequest({ url: 'http://x', personas: ['rage', 'snoop'], credentials: { email: 'qa@x.test', password: 'pw123456' } }).credentials, { email: 'qa@x.test', password: 'pw123456' });
+  assert.throws(() => parseRunRequest({ url: 'http://x', personas: ['ninja'] }), /personas/);
+  assert.throws(() => parseRunRequest({ url: 'http://x', personas: [] }), /personas/);
+  assert.throws(() => parseRunRequest({ url: 'http://x', credentials: { email: 'not-an-email' } }), /email/);
   assert.throws(() => parseRunRequest({}), /url zorunlu/);
   assert.throws(() => parseRunRequest({ url: 'http://x', mode: 'evil' }), /mode/);
   assert.throws(() => parseRunRequest({ url: 'http://x', durationSec: 99999 }), /durationSec/);
@@ -68,6 +93,8 @@ test('CLI argument parsing', () => {
   assert.equal(o.durationSec, 20);
   assert.equal(o.seed, 9);
   assert.equal(o.failOn, 'high');
+  assert.deepEqual(parseArgs(['run', 'http://x', '--personas', 'all']).personas, ['rage', 'keyboard', 'mobile', 'snoop']);
+  assert.deepEqual(parseArgs(['run', 'http://x', '--personas', 'rage,snoop', '--email', 'a@b.c']).personas, ['rage', 'snoop']);
   assert.throws(() => parseArgs(['run', 'http://x', '--wat']), /Bilinmeyen/);
   assert.throws(() => parseArgs(['run', 'http://x', '--fail-on', 'meh']), /fail-on/);
 });

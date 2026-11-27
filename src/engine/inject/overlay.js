@@ -157,6 +157,12 @@
     l.appendChild(box);
     const started = Date.now();
     const fixed = target && typeof target === 'object' ? target : null;
+    if (!el && !fixed) {
+      // Page-level finding (e.g. a duplicate request): a label only, never a wash over the page.
+      box.style.cssText = 'left:8px;top:30px;width:0;height:0;border:0;background:none';
+      setTimeout(() => box.remove(), 3800);
+      return;
+    }
     const frame = () => {
       const r = el ? el.getBoundingClientRect() : fixed;
       if (r) {
