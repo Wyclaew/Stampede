@@ -2,6 +2,8 @@
 // RageGhost CLI — headless runs for terminals and CI.
 //   rageghost run <url> [--mode safe|chaos|stress] [--duration 60] [--seed N] [--headed] [--yes-live] [--out dir] [--fail-on high]
 import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { GhostSession } from '../src/engine/session.js';
 import { SEVERITY_ORDER, SEVERITY_LABEL } from '../src/engine/issues.js';
 import { writeReport } from '../src/report/index.js';
@@ -87,7 +89,17 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  process.stderr.write(`\n❌ ${err.message}\n`);
-  process.exit(2);
-});
+const invokedDirectly = (() => {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    process.stderr.write(`\n❌ ${err.message}\n`);
+    process.exit(2);
+  });
+}

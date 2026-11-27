@@ -150,7 +150,16 @@ export class GhostSession extends EventEmitter {
       } catch {
         postData = null;
       }
-      this.reqMeta.set(req, { ts: Date.now(), method: req.method(), url: req.url(), type: req.resourceType(), postData: postData ? postData.slice(0, 500) : null });
+      const action = this.currentAction;
+      this.reqMeta.set(req, {
+        ts: Date.now(),
+        method: req.method(),
+        url: req.url(),
+        type: req.resourceType(),
+        postData: postData ? postData.slice(0, 500) : null,
+        seq: action ? action.seq : this.counters.actions,
+        actionLabel: action ? action.label : null,
+      });
     });
     // 'response' fires at headers; 'requestfinished' never fires when the app does not read the body.
     page.on('response', (res) => this.onResponse(res));
@@ -195,6 +204,8 @@ export class GhostSession extends EventEmitter {
         detail: `${meta.method} ${shortUrl(meta.url)} isteği ${status} döndürdü.`,
         evidence: [`${meta.method} ${meta.url} → ${status}`, meta.postData ? `body: ${meta.postData}` : null].filter(Boolean),
         request: { method: meta.method, url: meta.url, status },
+        triggerSeq: meta.seq,
+        trigger: meta.actionLabel || undefined,
       });
     } else if (status >= 400 && status !== 401 && status !== 403) {
       this.pushAnomaly('network', `${status} ${meta.method} ${shortUrl(meta.url)}`);
@@ -217,8 +228,9 @@ export class GhostSession extends EventEmitter {
   checkDuplicate(meta, status, duration) {
     const urlNoQuery = meta.url.split('?')[0];
     const key = `${meta.method} ${urlNoQuery} ${meta.postData || ''}`;
-    const fresh = (this.dupGroups.get(key) || []).filter((e) => meta.ts - e.ts < DUPLICATE_WINDOW_MS);
-    const group = [...fresh, { ts: meta.ts, status, duration }];
+    // Only requests born from the same impatient burst count; two deliberate actions are not a double submit.
+    const fresh = (this.dupGroups.get(key) || []).filter((e) => e.seq === meta.seq && meta.ts - e.ts < DUPLICATE_WINDOW_MS);
+    const group = [...fresh, { ts: meta.ts, status, duration, seq: meta.seq, actionLabel: meta.actionLabel }];
     this.dupGroups.set(key, group);
     if (group.length < 2) return;
     const money = MONEY.test(urlNoQuery) || MONEY.test(meta.postData || '');
@@ -230,6 +242,8 @@ export class GhostSession extends EventEmitter {
       detail: `${meta.method} ${shortUrl(urlNoQuery)} ${group.length} kez, ${group[group.length - 1].ts - first} ms içinde başarıyla işlendi${money ? ' — kullanıcıdan birden fazla ödeme/sipariş alınmış olabilir!' : '.'}`,
       evidence: group.map((g, i) => `#${i + 1} +${g.ts - first} ms  ${meta.method} ${urlNoQuery} → ${g.status} (${g.duration} ms)`).concat(meta.postData ? [`body: ${meta.postData}`] : []),
       request: { method: meta.method, url: urlNoQuery, body: meta.postData, count: group.length },
+      triggerSeq: group[0].seq,
+      trigger: group[0].actionLabel || undefined,
     });
   }
 
@@ -308,11 +322,11 @@ export class GhostSession extends EventEmitter {
   addIssue(partial) {
     const page = this.page;
     const enriched = {
-      ...partial,
       url: page ? page.url() : this.config.url,
       viewport: page ? page.viewportSize() : null,
       triggerSeq: this.currentAction ? this.currentAction.seq : this.counters.actions,
       trigger: this.currentAction ? this.currentAction.label : this.counters.actions ? 'arka plan kontrolü' : 'sayfa yüklenirken',
+      ...Object.fromEntries(Object.entries(partial).filter(([, v]) => v !== undefined)),
       detectedAt: Date.now(),
     };
     const { issue, isNew } = this.issues.add(enriched);

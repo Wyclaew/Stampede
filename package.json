@@ -8,15 +8,15 @@
     "rageghost": "bin/rageghost.js"
   },
   "engines": {
-    "node": ">=18.17"
+    "node": ">=21"
   },
   "scripts": {
     "start": "node scripts/start.js",
     "dashboard": "node src/server/index.js",
     "demo": "node demo/server.js",
     "ghost": "node bin/rageghost.js",
-    "test": "node --test test/unit/",
-    "test:e2e": "node --test --test-concurrency=1 test/e2e/",
+    "test": "node --test \"test/unit/**/*.test.js\"",
+    "test:e2e": "node --test --test-concurrency=1 \"test/e2e/**/*.test.js\"",
     "test:all": "npm test && npm run test:e2e",
     "postinstall": "node scripts/ensure-browser.js"
   },

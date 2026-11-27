@@ -7,7 +7,7 @@ export function listenWithFallback(server, preferredPort, { host = '127.0.0.1', 
       server.once('error', onError);
       server.listen(port, host, () => {
         server.off('error', onError);
-        resolve(port);
+        resolve(server.address().port);
       });
     };
     const onError = (err) => {
