@@ -11,6 +11,10 @@ Neyin kırıldığını canlı gösterir ve her hatayı film şeridi olan bir ra
 
 ---
 
+## HTML sunum ve gerçek videolar
+
+`presentation/index.html` dosyasını tarayıcıda açın (← → ile geçiş, `f` tam ekran). İçinde 9 slayt ve gerçek koşu videoları var: hatalı demo (Kaos, 4 ajan) ve biyom.co (Güvenli mod, 4 ajan). Videolar `presentation/videos/` altında; internet gerekmez, canlı demo çökerse yedek olarak kullanın.
+
 ## Sunumdan 10 dakika önce
 
 1. Terminal:

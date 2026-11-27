@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stampede · sunum</title>
+<style>
+:root{--bg:#0b1015;--panel:#151a20;--line:#2a323b;--text:#e4e8ed;--muted:#9ba6b1;--signal:#5aea98;--crit:#fc4447;--a1:#74aef5;--a2:#4eccd3;--a3:#ee8dbd;--a4:#c2a7f4}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:400 20px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;padding:6vh 7vw;gap:2.4vh}
+.slide.on{display:flex;animation:in .45s cubic-bezier(.16,1,.3,1)}
+@keyframes in{from{opacity:0;transform:translateY(12px)}}
+h1{margin:0;font-size:clamp(48px,7vw,112px);line-height:1;letter-spacing:-.03em;font-weight:800}
+h2{margin:0;font-size:clamp(30px,3.6vw,54px);line-height:1.1;letter-spacing:-.02em}
+p{margin:0;max-width:62ch;color:var(--muted)}
+.big{font-size:clamp(22px,2vw,30px);color:var(--text)}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.sig{color:var(--signal)}.bad{color:var(--crit)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;max-height:72vh}
+.grid figure{margin:0;position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
+.grid video{display:block;width:100%;height:32vh;object-fit:contain;background:#000}
+.grid figcaption{position:absolute;left:8px;top:8px;padding:2px 8px;border-radius:4px;font:700 13px ui-monospace,Menlo,monospace;color:#0b1015}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.card{padding:18px 20px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.card b{display:block;font-size:22px;margin-bottom:6px}.card span{color:var(--muted);font-size:17px}
+.chip{display:inline-block;padding:1px 8px;border-radius:4px;color:#0b1015;font:700 14px ui-monospace,Menlo,monospace;margin-right:6px}
+.flow{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:22px}
+.flow span{padding:10px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.flow i{color:var(--muted);font-style:normal}
+.nums{display:flex;gap:5vw;flex-wrap:wrap}.nums b{display:block;font:800 clamp(44px,5vw,80px)/1 ui-monospace,Menlo,monospace;color:var(--signal)}.nums span{color:var(--muted)}
+nav{position:fixed;right:24px;bottom:18px;color:var(--muted);font:14px ui-monospace,Menlo,monospace}
+code{font-family:ui-monospace,Menlo,monospace;background:var(--panel);padding:2px 8px;border-radius:5px;color:var(--text)}
+</style>
+</head>
+<body>
+
+<section class="slide on">
+  <h1>Stampede</h1>
+  <p class="big">Uygulamanıza aynı anda 8'e kadar sabırsız kullanıcı gönderen, kırılan her şeyi tekrar üretilebilir bir teste çeviren araç.</p>
+  <p class="mono">Kaynak kod yok · API anahtarı şart değil · tamamen lokal</p>
+</section>
+
+<section class="slide">
+  <h2>Problem</h2>
+  <p class="big">Kullanıcılar butona bir kez basmaz. Ödeme bir saniye gecikirse üç kez basar, yüklenirken geri tuşuna asılır, telefonu yan çevirir.</p>
+  <p class="big">Testlerimiz ise kibar bir robot: bir kez tıklar, bekler, doğru veriyi girer. <span class="bad">Çift tahsilat, kırık mobil sayfa, konsola düşen şifre</span> canlıda ortaya çıkar.</p>
+</section>
+
+<section class="slide">
+  <h2>Sürü: 7 kullanıcı tipi</h2>
+  <div class="cards">
+    <div class="card"><b><span class="chip" style="background:var(--a1)">A1</span>Öfkeli müşteri</b><span>Öde'ye ×8, geri/ileri spam, öderken internet kopar, ikinci sekmeden de öder.</span></div>
+    <div class="card"><b><span class="chip" style="background:var(--a2)">A2</span>Klavye kullanıcısı</b><span>Sadece Tab/Enter/ESC. Görünmeyen odak, ulaşılamayan kontroller.</span></div>
+    <div class="card"><b><span class="chip" style="background:var(--a3)">A3</span>Mobil kullanıcı</b><span>Dokunmatik 390×844, telefonu çevirir, sekmeyi dondurur.</span></div>
+    <div class="card"><b><span class="chip" style="background:var(--a4)">A4</span>Meraklı saldırgan</b><span>URL kimliği, gizli alan, hafıza bozma, XSS/SQL.</span></div>
+    <div class="card"><b>Yarıda bırakan · Yavaş bağlantı · Bot</b><span>Form verisi kaybı, yavaş 3G'de çift basma, kırık linkler.</span></div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Gerçek koşu · hatalı demo mağaza <span class="mono" style="font-size:.5em;color:var(--muted)">Kaos · 4 ajan · 22 sn</span></h2>
+  <div class="grid">
+    <figure><video src="videos/demo/agent1.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a1)">A1</figcaption></figure>
+    <figure><video src="videos/demo/agent2.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a2)">A2</figcaption></figure>
+    <figure><video src="videos/demo/agent3.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a3)">A3</figcaption></figure>
+    <figure><video src="videos/demo/agent4.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a4)">A4</figcaption></figure>
+  </div>
+  <p>Bu koşu: 10 sorun, skor 15. Kritik çift ödeme, mobil taşma, üstü kapalı buton, UI donması…</p>
+</section>
+
+<section class="slide">
+  <h2>Gerçek koşu · biyom.co <span class="mono" style="font-size:.5em;color:var(--muted)">Güvenli mod · 4 ajan · 22 sn</span></h2>
+  <div class="grid">
+    <figure><video src="videos/biyom/agent1.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a1)">A1</figcaption></figure>
+    <figure><video src="videos/biyom/agent2.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a2)">A2</figcaption></figure>
+    <figure><video src="videos/biyom/agent3.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a3)">A3</figcaption></figure>
+    <figure><video src="videos/biyom/agent4.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a4)">A4</figcaption></figure>
+  </div>
+  <p>Yazma istekleri ağda engellendi. Bulunan: yakalanmamış JS hatası (React #418) ve konsol hatası. Skor 83.</p>
+</section>
+
+<section class="slide">
+  <h2>Nasıl karar veriyor?</h2>
+  <div class="flow"><span>Sayfayı keşfet</span><i>→</i><span>Bölgelere ayır<br><small class="mono">giriş · ödeme · arama · form</small></span><i>→</i><span>Riski sınıfla<br><small class="mono">ödeme · silme · OAuth</small></span><i>→</i><span>Ağırlıklı seçim<br><small class="mono">seed'li, tekrar oynatılır</small></span><i>→</i><span>Hamle + ölç</span></div>
+  <p class="big">Karar grafiği her ajanın kararını canlı gösterir. İsteğe bağlı Gemini: tek çağrıda saldırı planı, görsel inceleme, kök neden özeti.</p>
+</section>
+
+<section class="slide">
+  <h2>Geliştiricinin eline ne geçer?</h2>
+  <div class="cards">
+    <div class="card"><b>Film şeridi</b><span>Hatadan 2 sn önce, kırmızı nişanla tık anı, hata anı.</span></div>
+    <div class="card"><b>Playwright testi</b><span><code>stampede.spec.ts</code>: hata düzelene kadar kırmızı.</span></div>
+    <div class="card"><b>Karne</b><span>Yarış, dayanıklılık, mobil, güvenlik, performans, klavye.</span></div>
+    <div class="card"><b>CI kapısı</b><span><code>--fail-on high</code> ile her PR'da.</span></div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Güvenli ve sağlam</h2>
+  <div class="nums">
+    <div><b>0</b><span>güvenli modda sunucuya giden yazma isteği</span></div>
+    <div><b>46</b><span>birim testi</span></div>
+    <div><b>6</b><span>gerçek Chromium uçtan uca koşu</span></div>
+  </div>
+  <p class="big">OAuth butonlarına asla basılmaz · şifre raporda maskelenir · yerel API başka sitelerden tetiklenemez.</p>
+</section>
+
+<section class="slide">
+  <h1 class="sig">Kullanıcılarınız sabırsız.</h1>
+  <h2>Testleriniz de öyle olmalı.</h2>
+  <p class="mono">npm start · github.com/Wyclaew/Stampede</p>
+</section>
+
+<nav id="nav"></nav>
+<script>
+const slides=[...document.querySelectorAll('.slide')];let i=0;
+const show=n=>{slides[i].classList.remove('on');i=Math.max(0,Math.min(slides.length-1,n));slides[i].classList.add('on');document.getElementById('nav').textContent=(i+1)+' / '+slides.length+'  ← →';};
+document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))show(i+1);if(['ArrowLeft','PageUp'].includes(e.key))show(i-1);if(e.key==='f')document.documentElement.requestFullscreen();});
+document.addEventListener('click',e=>show(e.clientX>innerWidth/3?i+1:i-1));show(0);
+</script>
+</body>
+</html>
