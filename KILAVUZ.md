@@ -1,12 +1,12 @@
 # Stampede kullanım kılavuzu
 
-Stampede, web uygulamanızı **aynı anda dört farklı sabırsız kullanıcıyla** test eder. Her kullanıcı ayrı bir tarayıcı sekmesinde çalışır, sayfayı kendisi keşfeder ve kendi tarzında saldırır. Bu sırada Stampede tarayıcıyı izler ve kırılan her şeyi üç şeye çevirir:
+Stampede, web uygulamanızı **aynı anda en fazla 8 sabırsız kullanıcıyla** test eder. 7 farklı kullanıcı tipi var; her tipten 1–3 kopya seçebilirsiniz. Her kullanıcı ayrı bir tarayıcı sekmesinde çalışır, sayfayı kendisi keşfeder ve kendi tarzında saldırır. Stampede bu sırada tarayıcıyı izler ve kırılan her şeyi üç çıktıya çevirir:
 
 - ekran görüntülü bir rapor,
 - hatadan hemen önceki anları gösteren bir "film şeridi",
 - hatayı birebir tekrar eden, çalıştırılabilir bir Playwright testi.
 
-Kaynak koda, API anahtarına veya buluta ihtiyaç yok. Her şey sizin bilgisayarınızda çalışır.
+Kaynak koda veya buluta ihtiyaç yok, her şey sizin bilgisayarınızda çalışır. İsterseniz Gemini ile AI özellikleri açılır (bölüm 4b).
 
 GitHub: https://github.com/Wyclaew/rageghost (isim değişikliği için bkz. bölüm 8)
 
@@ -18,10 +18,11 @@ GitHub: https://github.com/Wyclaew/rageghost (isim değişikliği için bkz. bö
 | --- | --- | --- |
 | Node.js 21+ | Evet | Bu makinede Node 24 kurulu. Başka makinede `node -v` ile kontrol edin. |
 | `npm install` | Yeni makinede bir kez | Playwright, Chromium ve fontları kurar. Bu makinede yapıldı. İnternet ister. |
-| Kök klasör adı | İsteğe bağlı | Klasör hâlâ `rageghost`. Değiştirmek için bölüm 8'e bakın. |
+| Gemini anahtarı | İsteğe bağlı | AI özellikleri için proje klasöründe `.env` dosyası açıp `GEMINI_API_KEY=...` yazın (bölüm 4b). Anahtarı kimseyle paylaşmayın; `.env` git'e girmez. |
+| Kök klasör adı | İsteğe bağlı | Klasör hâlâ `rageghost`. Değiştirmek için bölüm 8. |
 | İzinler | Hayır | Özel bir macOS izni gerekmez. |
 
-> Hackathon'dan **önce** `npm install` yapılmış olsun. Sonrasında demo tamamen internetsiz çalışır.
+> Hackathon'dan **önce** `npm install` yapılmış olsun. AI kapalıyken demo tamamen internetsiz çalışır.
 
 ---
 
@@ -42,47 +43,49 @@ Tarayıcı kendiliğinden açılır:
   Dashboard      http://localhost:7400
   Demo (hatalı)  http://localhost:7500
   Demo (düzgün)  http://localhost:7500/?fixed=1
+  AI (Gemini)    açık (.env GEMINI_API_KEY)   veya   kapalı
 ```
 
 - Port doluysa araç otomatik olarak bir sonraki boş portu kullanır ve terminale doğru adresi yazar.
-- Durdurmak için `Ctrl+C`. Tarayıcı açılmasın derseniz: `npm start -- --no-open`.
+- Durdurmak için `Ctrl+C`. Açık ajan pencereleri önce düzgünce kapatılır, sonra çıkılır. Tarayıcı açılmasın derseniz: `npm start -- --no-open`.
 
 ---
 
 ## 3. Ekranı okumak
 
-Dashboard üç sütundan oluşur.
+Ekranda açıklama metinleri yok; her bölümün yanındaki **(i)** düğmesinin üstüne gelin veya tıklayın.
 
 **Sol: Görev**
 
-- **Hedef adres:** "Demo · hatalı", "Demo · düzeltilmiş" ve "biyom.co" kısayolları.
-- **Mod:** Güvenli keşif, Tam kaos veya Stres (bölüm 5).
-- **Sürü:** hangi ajanların çalışacağını seçersiniz.
-- **Test kimliği:** giriş/kayıt formlarına yazılacak e-posta ve şifre.
-- **Süre ve seed.**
+- **Hedef adres** ve kısayollar: Demo · hatalı, Demo · düzgün, biyom.co.
+- **Mod:** Güvenli, Kaos, Stres (bölüm 5).
+- **Sürü:** 7 kullanıcı tipi; her birinin yanındaki `−` `+` ile 0–3 adet. Toplam en fazla 8 (sağ üstteki sayaç).
+- **Test kimliği:** giriş/kayıt formlarına yazılacak e-posta ve şifre. Boşsa otomatik üretilir.
+- **Süre**, **seed** ve üç anahtar:
+  - **Pencereleri göster:** her ajan için gerçek bir Chrome penceresi açar. Pencereler ekranı ızgara halinde paylaşır (4 ajan 2×2, 8 ajan 4×2). Başlarken farenizi ekranın en üstüne (menü çubuğuna) taşırız. Ajan imleçleri sizin farenizi dinlemez; farenizi pencerelere götürseniz de ajanlar bozulmaz.
+  - **Demoyu sıfırla:** yalnız dahili demoda görünür. Her başlatmada önceki siparişler, hesaplar ve sepet silinir.
+  - **AI (Gemini):** anahtar varsa açılabilir (bölüm 4b).
 
 **Orta: Sürü ve karar grafiği**
 
-- Her ajanın sekmesi canlı akar. Ajanların imleci kendi renginde bir ok ve kod etiketiyle görünür (A1 RAGE, A2 KEYS, A3 TOUCH, A4 SNOOP).
-- Ajan sayfaya her baktığında tıklamayı düşündüğü elemanların etrafında ince çerçeveler ve **olasılık yüzdeleri** belirir. Kalın olan seçilen hedeftir.
-- Bulunan hata sayfada kırmızı çerçeve ve etiketle işaretlenir.
-- Bir karoya tıklamak o ajanı seçer. Sağ üstteki büyüt düğmesi o ajanı büyük gösterir.
-- **Karar grafiği** seçili ajanın beynidir ve üç sütundan oluşur:
-  - **Gördüğü bölgeler:** giriş/kayıt, sepet/ödeme, arama/filtre, form, navigasyon, içerik.
-  - **Tarttığı hamleler:** ağırlıklı adaylar ve yüzdeleri.
-  - **Sonuç:** sayfa tepki verdi, ağ isteği gitti, sorun bulundu ya da tepki yok.
-
-  Seçilen hamle ajan renginde bir sinyalle akar, sonucu sağ sütunda yanar.
+- Her ajanın sekmesi canlı akar. İmleçler kendi renginde bir ok ve kod etiketiyle görünür. Hedefe hızlanarak gidip yavaşlayarak durur; tıklarken küçülür.
+- Ajan sayfaya her baktığında aday elemanların etrafında ince çerçeveler ve **olasılık yüzdeleri** belirir; kalın olan seçilen hedeftir. Bulunan hata kırmızı çerçeve ve etiketle işaretlenir.
+- Karoya tıklamak o ajanı seçer, sağ üstteki düğme büyütür. Seçili ajan daha net, diğerleri hafif çözünürlükte akar (performans için).
+- **Karar grafiği:**
+  - **Tümü:** bütün ajanların son kararı tek ekranda, her biri kendi renginde. Akış sırası: hedef aldığı sayfa bölgesi, seçtiği hamle (yanında en olası 6 adayın dağılımı), sonuç. Sinyaller çizgiler boyunca akar; sonuç kutularındaki renkli çubuk hangi ajanın ne kadar katkı verdiğini gösterir.
+  - **A1, A2 …:** o ajanın tarttığı bütün adaylar ve yüzdeleri.
+  - "AI" işaretli hamleler Gemini planından gelir.
 
 **Sağ: Dayanıklılık**
 
 - Genel skor (0–100) ve skor geçmişi çizgisi.
-- Önem sayaçları: Kritik ◆, Yüksek ▲, Orta ●, Düşük □. Renk körleri için şekil de var.
-- **Kategori karnesi:** Yarış durumu, Hata dayanıklılığı, Mobil & yerleşim, Güvenlik & veri, Performans, Klavye & etkileşim.
+- Önem sayaçları: Kritik ◆, Yüksek ▲, Orta ●, Düşük □.
+- Kategori karnesi: Yarış durumu, Hata dayanıklılığı, Mobil & yerleşim, Güvenlik & veri, Performans, Klavye & etkileşim.
+- AI paneli (açıksa): saldırı planı adımları (biten adım işaretlenir), koşu sonunda kök neden özeti ve öncelikli düzeltmeler.
 - Sekmeler:
-  - **Sorunlar:** önem sırasına göre. Karta tıklayınca anlamı, çözümü ve kanıtı açılır.
+  - **Sorunlar:** karta tıklayınca anlamı, çözümü ve kanıtı açılır.
   - **Hamleler:** tüm ajanların hamle akışı.
-  - **Ağ ve konsol:** 5xx, engellenen istekler, JS hataları.
+  - **Ağ · konsol:** 5xx, engellenen istekler, JS hataları, **GİRİŞ** satırları (kayıt ve giriş sonucu) ve AI durumları.
 
 Koşu bitince **Rapor** kutusu çıkar: HTML rapor, Playwright testleri (`stampede.spec.ts`), Markdown ve JSON.
 
@@ -90,26 +93,52 @@ Koşu bitince **Rapor** kutusu çıkar: HTML rapor, Playwright testleri (`stampe
 
 ## 4. Ajanlar (personalar)
 
-| Kod | Ajan | Ekran | Ne yapar | Tipik bulduğu |
-| --- | --- | --- | --- | --- |
-| A1 | Öfkeli müşteri | 1280×800 | Ödeme ve gönder butonlarına 2–8 kez basar, geri/ileri spamlar, F5'e basar. Tıklamadan hemen önce ekranı 375 px'e daraltır. Öderken interneti koparıp 3 kez daha basar. Aynı sayfayı ikinci sekmede açıp iki yerden öder. | Çift ödeme, yarış durumu, taşma |
-| A2 | Klavye kullanıcısı | 1280×800 | Fareye hiç dokunmaz. Tab ile gezer, Enter/Space ile tetikler, ESC spamlar. | Görünmeyen odak, klavyeyle açılamayan kontroller, ölü butonlar |
-| A3 | Mobil kullanıcı | 390×844, dokunmatik | Parmakla basar, telefonu yan çevirir, sekmeyi arka plana atıp uyandırır, hızlı kaydırır. | Mobil taşma, üstü kapalı butonlar, CLS |
-| A4 | Meraklı saldırgan | 1280×800 | URL'deki numaraları değiştirir (`/siparis/104` yerine 105, 0, -1). Gizli form alanlarını ve tarayıcı hafızasını bozar. Formlara XSS/SQL denemeleri yazar. | XSS, hassas veri sızıntısı, bozuk hafızada çökme |
+| Ajan | Ekran | Ne yapar | Tipik bulduğu |
+| --- | --- | --- | --- |
+| Öfkeli müşteri | 1280×800 | Ödeme ve gönder butonlarına 2–8 kez basar, geri/ileri spamlar, F5'e basar. Tıklamadan hemen önce ekranı 375 px'e daraltır. Öderken interneti kesip 3 kez daha basar. Aynı sayfayı ikinci sekmede açıp iki yerden öder. | Çift ödeme, yarış durumu, taşma |
+| Klavye kullanıcısı | 1280×800 | Fareye hiç dokunmaz. Tab ile gezer, Enter/Space ile tetikler, ESC spamlar. | Görünmeyen odak, klavyeyle açılamayan kontroller |
+| Mobil kullanıcı | 390×844, dokunmatik | Parmakla basar, telefonu çevirir, sekmeyi arka plana atıp uyandırır, hızlı kaydırır. | Mobil taşma, üstü kapalı butonlar, CLS |
+| Meraklı saldırgan | 1280×800 | URL'deki numaraları değiştirir, gizli form alanlarını ve tarayıcı hafızasını bozar, XSS/SQL denemeleri yazar. | XSS, hassas veri sızıntısı |
+| Yarıda bırakan | 1280×800 | Forma yazar, başka sayfaya geçer, geri döner ve yazdıklarının durup durmadığını kontrol eder. Yarıda yeniler. | Form verisi kaybı |
+| Yavaş bağlantı | 1280×800 | Yavaş 3G ve 4 kat yavaş işlemci. Bir şey olmadığını sanıp 1 saniye sonra yine basar. | Yavaş istek, takılı spinner, gecikmeli çift gönderim |
+| Hızlı gezgin (bot) | 1280×800 | Bağlantıları beklemeden art arda açar, URL'leri dener. | Kırık linkler, 404/500, yavaş sayfalar |
 
-Her ajan kendi tarayıcı bağlamında (ayrı çerez/oturum) çalışır. Tek ajan seçmek daha hafiftir; dördü birden en etkileyici görüntüyü verir.
+- Aynı tipten 2–3 kopya seçebilirsiniz; örneğin 3 öfkeli müşteri gerçek eşzamanlı yük oluşturur. Kopyalar A1…A8 kodu ve farklı renk alır.
+- Her ajan kendi tarayıcı bağlamında çalışır: ayrı çerez, ayrı oturum, ayrı hafıza.
 
 ### Otomatik giriş (test kimliği)
 
-- Bir ajan sayfada şifre alanı olan bir giriş veya kayıt formu görürse önce onu dener.
-- Formu test kimliğiyle doldurur. Kayıt formlarında her denemede `adres+a1-1@…` gibi yeni bir e-posta kullanır. Öfkeli müşteri gönder butonuna 2–3 kez basar.
+- Ajan sayfada şifre alanı olan bir form görürse önce onu dener.
+- Form hem "Kayıt" hem "Giriş" butonu içeriyorsa ve hesap henüz yoksa **önce kayıt olur, sonra aynı kimlikle giriş yapar**. Sonuç Ağ · konsol sekmesinde `GİRİŞ` satırı olarak görünür; ör. "Giriş denendi: sayfa: Hoş geldin …".
 - Kimlik şu sırayla belirlenir:
-  1. Dashboard'daki e-posta/şifre alanları
-  2. `.env` veya ortam değişkenleri: `STAMPEDE_EMAIL`, `STAMPEDE_PASSWORD`
-  3. İkisi de yoksa otomatik üretilen `stampede+<seed>@example.test` ve rastgele bir şifre
-- **Google, Apple, GitHub, Microsoft, Facebook, SSO ve "… ile giriş / ile devam" butonlarına hiçbir modda basılmaz.** Bu adreslere giden bağlantılar da ağ katmanında engellenir.
-- Şifre raporda, JSON'da ve ağ kayıtlarında `••••••` olarak maskelenir. Üretilen Playwright testi şifreyi `process.env.STAMPEDE_PASSWORD` ile okur.
-- Güvenli keşif modunda form doldurulur ama **gönderilmez**.
+  1. Dashboard'daki alanlar
+  2. `.env` dosyasındaki `STAMPEDE_EMAIL` ve `STAMPEDE_PASSWORD`
+  3. Hiçbiri yoksa her koşuya özel otomatik bir kimlik: `stampede+<seed>@example.test`
+- Öfkeli müşteri gönder butonuna 2–3 kez basar, böylece çift kayıt hatasını da yakalar.
+- **Google, Apple, GitHub, Microsoft, Facebook, SSO ve "… ile giriş" butonlarına hiçbir modda basılmaz.** Bu adreslere giden bağlantılar ağ katmanında engellenir.
+- Şifre raporda, JSON'da ve ağ kayıtlarında `••••••` olarak maskelenir. Üretilen test şifreyi `process.env.STAMPEDE_PASSWORD` ile okur.
+- Güvenli modda form doldurulur ama **gönderilmez**.
+
+### 4b. AI özellikleri (Gemini, isteğe bağlı)
+
+Kurulum: proje klasöründe `.env` adında bir dosya açın (örnek: `.env.example`) ve şunu yazın:
+
+```
+GEMINI_API_KEY=buraya-anahtarınız
+```
+
+Sonra `npm start`'ı yeniden başlatın. Dashboard'un sağ üstünde "AI hazır" yazar. İsterseniz `GEMINI_MODEL=` ile modeli seçebilirsiniz. Model bulunamazsa araç uygun bir "flash" modelini kendisi seçer.
+
+| Özellik | Ne zaman | Ne yapar |
+| --- | --- | --- |
+| Saldırı planlayıcı | Koşu başında, tek istek | İlk sayfanın sadeleştirilmiş yapısını gönderir, her persona için 6–10 adımlık bir plan alır. Plan adımlarına uyan hamlelerin ağırlığı 5 kat artar. Plan koşuyu bekletmez; gelince devreye girer. |
+| Görsel inceleme | Koşu sonunda | Her ajanın son ekran görüntüsüne bakar; üst üste binen metin, kesik buton, okunmayan kontrast gibi görsel kusurları "AI görsel inceleme bulgusu" olarak ekler (en fazla Orta önem). |
+| Kök neden özeti | Koşu sonunda | Bütün bulguları ortak kök nedenlere gruplar, öncelikli düzeltme listesi çıkarır. Dashboard'daki AI panelinde ve HTML raporun en üstünde görünür. |
+
+Notlar:
+- AI açıkken sayfa özeti ve ekran görüntüleri Google'a gönderilir. Gizli bir sitede istemiyorsanız **AI (Gemini)** anahtarını kapatın veya CLI'da `--no-ai` kullanın.
+- Anahtar yalnız istek başlığında gider; URL'ye, loglara ve raporlara yazılmaz.
+- AI çağrısı başarısız olursa koşu devam eder; uyarı AI panelinde görünür.
 
 ---
 
@@ -125,15 +154,15 @@ Canlı bir sitede Tam kaos veya Stres seçerseniz bir onay kutusu çıkar. Kutuy
 
 ### biyom.co (veya herhangi bir canlı site) adım adım
 
-1. Dashboard'da **biyom.co** kısayoluna basın. Mod otomatik olarak Güvenli keşif olur.
-2. Dört ajanı seçili bırakın. Süre 60–120 sn olsun.
-3. **Sürüyü başlat**.
+1. Dashboard'da **biyom.co** kısayoluna basın. Mod otomatik olarak Güvenli olur.
+2. İsterseniz "Hızlı gezgin (bot)" ekleyin; kırık linkleri toplar. Süre 60–120 sn.
+3. **Başlat**.
 4. "engellenen" sayacı, güvenli modun durdurduğu yazma isteklerini gösterir. Ayrıntısı **Ağ ve konsol** sekmesinde.
 
 Terminalden aynı şey:
 
 ```bash
-node bin/stampede.js run https://biyom.co --mode safe --personas all --duration 90
+node bin/stampede.js run https://biyom.co --mode safe --personas rage,keyboard,mobile,snoop,bot --duration 90
 ```
 
 Güncel sürümle biyom.co'da 25 saniyelik bir Güvenli keşif yaptık. Sonuç:
@@ -152,9 +181,9 @@ Güncel sürümle biyom.co'da 25 saniyelik bir Güvenli keşif yaptık. Sonuç:
 
 ## 6. Dahili hatalı demo ("Fincan" kahve dükkânı)
 
-1. **Demo · hatalı**, **Tam kaos**, dört ajan, 45 sn, seed **11** → **Sürüyü başlat**.
+1. **Demo · hatalı**, **Kaos**, varsayılan dört ajan, 45 sn, seed **11** → **Başlat**. (Demo verileri otomatik sıfırlanır.)
 2. Koşu bitince demo sitesinde **Kasa defteri** (`/#/orders`) sayfasını açın. Aynı ödemenin birden fazla kez tahsil edildiğini görürsünüz.
-3. **Demo · düzeltilmiş** ile aynı ayarları tekrar çalıştırın. Kritik ve yüksek sorun çıkmaz; bunu otomatik test de doğruluyor.
+3. **Demo · düzgün** ile aynı ayarları tekrar çalıştırın. Kritik ve yüksek sorun çıkmaz; bunu otomatik test de doğruluyor.
 
 Demo verisini sıfırlamak için:
 
@@ -203,6 +232,8 @@ Bizim 30–45 saniyelik 4 ajanlı koşularımızda 22–27 farklı sorun bulundu
 | DOM sızıntısı | Orta | Aynı ekranda eleman sayısı hep artıyor | Eski elemanları temizle |
 | Görünmeyen klavye odağı | Orta | Tab ile gelinen elemanda çerçeve yok | `:focus-visible` stili |
 | Klavyeyle ulaşılamayan kontrol | Orta | `cursor:pointer` olan bir div Tab ile odaklanamıyor | `<button>` veya `role` + `tabindex` |
+| Geri gelince form verisi kayboldu | Orta | Forma yazılan metin, başka sayfaya geçip dönünce silinmiş | Taslağı sessionStorage/URL'de tut |
+| AI görsel inceleme bulgusu | Orta/Düşük | Gemini ekran görüntüsünde görsel kusur gördü (model çıktısı, gözle doğrulayın) | Ekranı o genişlikte açıp düzelt |
 | Güvensiz çerez | Orta/Düşük | Oturum çerezi HttpOnly/Secure/SameSite değil | Çerez bayraklarını ekle |
 | Konsol hatası, 4xx, başarısız istek | Orta/Düşük | Uygulama hata bildirdi | Kaynağında ele al |
 | Yavaş istek | Düşük/Orta | İstek 3 sn'den uzun sürdü | Önbellek, iskelet ekran |
@@ -269,13 +300,16 @@ cd "/Users/erne/Desktop/Log to LoFi/stampede" && gh repo rename stampede --yes
 | "Port … aralığı dolu" | `PORT=8400 DEMO_PORT=8500 npm start` |
 | "Tarayıcı başlatılamadı" | `npx playwright install chromium` (internet ister) veya Google Chrome kurun. Araç Chrome'u otomatik dener. |
 | Karolar boş kalıyor | Sayfa değişmedikçe kare gelmez, birkaç saniye bekleyin. Ya da **Tarayıcı pencerelerini de göster** kutusunu işaretleyin. |
-| Bilgisayar yavaşladı | Daha az ajan seçin (2 ajan yeterince etkileyici) veya Stres yerine Tam kaos kullanın. |
+| Bilgisayar yavaşladı | Daha az ajan seçin (4 yeterince etkileyici); "Pencereleri göster"i kapatın; Stres yerine Kaos kullanın. |
+| "Google Chrome for Testing quit unexpectedly" | Sunucu, ajan pencereleri açıkken zorla kapatılınca olur (ör. terminal kapatıldı). Artık `Ctrl+C` önce tarayıcıyı düzgün kapatıyor. Uyarıyı "Ignore" ile kapatın. |
+| AI kapalı görünüyor | `.env` dosyasında `GEMINI_API_KEY=...` satırı olmalı; ekledikten sonra `npm start`'ı yeniden başlatın. |
+| Giriş yapılamadı | Ağ · konsol sekmesindeki `GİRİŞ` satırı sayfanın verdiği mesajı gösterir. Kendi sitenizde kayıtlı bir test hesabı varsa Test kimliği alanlarına girin. |
 | "Zaten çalışan bir sürü var" | **Durdur**'a basın, rapor yazılınca yeniden başlatın. |
 | Canlı sitede Kaos başlamıyor | Bilinçli bir güvenlik önlemi. Onay kutusunu işaretleyin ya da Güvenli keşif'i seçin. |
 | Giriş formu doldurulmadı | Sayfada görünür bir şifre alanı olmalı. Güvenli modda form doldurulur ama gönderilmez. |
 | Bot koruması | **Tarayıcı pencerelerini de göster**, Güvenli keşif. |
 | Demo sonuçları birikti | `curl -X POST http://localhost:7500/api/reset` veya `npm start`'ı yeniden başlatın. |
-| Testler | `npm test` (36 birim test, ~1 sn), `npm run test:e2e` (5 uçtan uca koşu, ~3 dk) |
+| Testler | `npm test` (46 birim test, ~1 sn), `npm run test:e2e` (6 uçtan uca koşu, ~4 dk) |
 
 ---
 
@@ -285,6 +319,8 @@ cd "/Users/erne/Desktop/Log to LoFi/stampede" && gh repo rename stampede --yes
 bin/stampede.js         Terminal / CI aracı
 scripts/start.js        Tek komutla demo + dashboard
 src/engine/             Sürü: session, agent, strategy, personas, actions, detectors, safety
+src/ai/gemini.js        İsteğe bağlı Gemini: planlayıcı, görsel inceleme, kök neden özeti
+src/util/desktop.js     Görünür pencere ızgarası ve imleç park etme (macOS)
 src/engine/inject/      Sayfaya enjekte edilen ajan katmanı ve ölçüm fonksiyonları
 src/server/             API, Server-Sent Events, ajan başına MJPEG canlı görüntü
 src/report/             HTML/MD/JSON rapor + Playwright TypeScript test üretici

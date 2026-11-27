@@ -180,9 +180,13 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
       .then(async (report) => {
         const written = await writeReport(report, reportsDir());
         lastReport = { ...summary(report), reportName: written.name };
+        session = null; // free the slot before telling the UI, so a new target can start right away
         broadcast('done', lastReport);
       })
-      .catch((err) => broadcast('failed', { message: err.message }))
+      .catch((err) => {
+        session = null;
+        broadcast('failed', { message: err.message });
+      })
       .finally(() => {
         session = null;
       });

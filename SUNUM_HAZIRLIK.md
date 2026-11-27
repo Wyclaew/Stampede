@@ -1,6 +1,6 @@
 # Stampede: 7 dakikalık sunum hazırlığı
 
-**Tek cümle:** Stampede, uygulamanıza aynı anda dört farklı sabırsız kullanıcı gönderir:
+**Tek cümle:** Stampede, uygulamanıza aynı anda 8'e kadar sabırsız kullanıcı gönderir (7 tip). Varsayılan dörtlü:
 
 - öfkeli müşteri,
 - klavye kullanıcısı,
@@ -113,7 +113,9 @@ Neyin kırıldığını canlı gösterir ve her hatayı film şeridi olan bir ra
 - **"Deterministik mi?"** Hamle seçimi seed'li. Ağ zamanlaması doğal olarak değişebilir.
 - **"Yapay zekâ nerede?"** Karar motoru yerel bir ağırlıklı model ve karar grafiğinde görünür. Bilinçli olarak anahtarsız ve internetsiz. Sıradaki adım: isteğe bağlı bir LLM planlayıcı (sayfanın erişilebilirlik ağacından tek çağrıyla saldırı planı) ve ekran görüntüsünden görsel hata analizi.
 - **"Ölçek?"** CLI headless çalışır. Personalar ayrı tarayıcı bağlamlarında paralel koşar.
-- **"Test kapsamı?"** 36 birim testi ve gerçek Chromium'la 5 uçtan uca koşu.
+- **"Test kapsamı?"** 46 birim testi ve gerçek Chromium'la 6 uçtan uca koşu.
+- **"Pencereler ekranı kaplıyor, faremi oynatırsam?"** Görünür modda pencereler ekranı ızgara halinde paylaşır; başlarken gerçek fare menü çubuğuna taşınır ve ajan imleçleri motor tarafından sürülür, sizin farenizi dinlemez.
+- **"AI ne katıyor?"** İsteğe bağlı Gemini: koşu başında tek çağrıyla saldırı planı (ajan ağırlıklarını yönlendirir, karar grafiğinde 'AI' etiketi), sonda ekran görüntülerinden görsel kusur bulma ve kök neden özeti. Anahtarsız her şey lokal çalışır.
 
 ---
 
@@ -126,11 +128,19 @@ Tema: "Geliştiricilerin hayatını kolaylaştıran araç". 8 saatlik, tek kişi
 
 GERÇEKTEN yapılmış olanlar (bunların dışında özellik uydurma; yapılmamış bir şeyi önerirsen "gelecek planı" diye etiketle):
 - Herhangi bir URL'de kaynak kod olmadan çalışan bir test aracı. Node.js + Playwright + gerçek Chromium. API anahtarı yok, tamamen lokal, fontlar bile lokal.
-- Sürü: aynı anda 4 persona, her biri ayrı tarayıcı bağlamında/sekmede:
+- Sürü: 7 persona tipi, her tipten 1–3 kopya, aynı anda en fazla 8 ajan; her biri ayrı tarayıcı bağlamında/sekmede:
   - A1 Öfkeli müşteri: 2–8 hızlı tık, geri/ileri spam, F5, tıklamadan hemen önce ekranı 375px'e daraltma, ödeme anında interneti kesip 3 kez daha basma, aynı sayfayı ikinci sekmede açıp iki yerden ödeme.
   - A2 Klavye kullanıcısı: sadece Tab/Enter/Space/ESC; görünmeyen odak ve klavyeyle ulaşılamayan kontrolleri bulur.
   - A3 Mobil kullanıcı: 390×844 dokunmatik, telefonu çevirme, sekmeyi dondurup uyandırma, hızlı kaydırma.
   - A4 Meraklı saldırgan: URL'deki numaraları değiştirme, gizli form alanlarını ve localStorage/sessionStorage'ı bozma, hafızayı doldurma, XSS/SQL denemeleri.
+  - Yarıda bırakan: forma yazıp başka sayfaya geçip geri döner, yazdıkları kayboldu mu bakar.
+  - Yavaş bağlantı: yavaş 3G + 4× yavaş CPU, 1 sn sonra tekrar basar.
+  - Hızlı gezgin (bot): bağlantıları beklemeden art arda açar, kırık linkleri/5xx'leri toplar.
+- Görünür pencere modu: ajan pencereleri ekranı ızgara halinde paylaşır, gerçek fare menü çubuğuna park edilir, ajan imleçleri ivmeli (ease-in-out) animasyonla motor tarafından sürülür.
+- İsteğe bağlı Gemini (GEMINI_API_KEY): saldırı planlayıcı (tek çağrı, plan adımlarına uyan hamleler 5× ağırlık, 'AI' etiketi), koşu sonu görsel inceleme (ekran görüntüsünden görsel kusurlar), kök neden özeti + öncelikli düzeltmeler.
+- Otomatik giriş: önce kayıt, sonra aynı kimlikle giriş; sonuç dashboard'da 'GİRİŞ' satırı olarak görünür.
+- Yerel API güvenliği: Host/Origin/content-type kontrolü (başka bir sitenin tarayıcı üzerinden sürüyü tetiklemesi engelli).
+- Karar grafiği: 'Tümü' görünümünde bütün ajanların son kararı kendi renginde, akan sinyallerle; ajan seçince o ajanın tüm adayları.
 - Keşif ve beyin: her hamleden önce sayfadaki elemanlar bulunur, bölgelere ayrılır (giriş/kayıt, sepet/ödeme, arama/filtre, form, navigasyon, içerik) ve risk sınıfına konur (ödeme, silme, OAuth, site dışı). Seed'li ağırlıklı seçim yapılır; aynı seed aynı hamle sırasını verir. Dashboard'daki "karar grafiği" seçili ajanın bölgelerini, tarttığı hamleleri olasılıklarıyla ve sonucu canlı gösterir. Sayfada da adaylar olasılık yüzdeli çerçevelerle işaretlenir.
 - Otomatik giriş: giriş/kayıt formlarını test kimliğiyle doldurur (dashboard alanı, .env STAMPEDE_EMAIL/STAMPEDE_PASSWORD ya da otomatik üretilen stampede+seed@example.test). Google/Apple/GitHub/SSO "ile giriş" butonlarına hiçbir modda basmaz. Şifre raporda maskelenir.
 - Modlar: Güvenli keşif (yazma istekleri ağ katmanında engellenir, ödeme/silme/çıkışa dokunulmaz, form gönderilmez; canlı siteler için), Tam kaos (lokal/staging), Stres (sadece lokal: CPU 4x yavaş, yavaş 3G, Wi-Fi kopması, API yanıtlarını yolda bozma). Canlı sitede Kaos/Stres için açık onay zorunlu.
@@ -143,7 +153,7 @@ GERÇEKTEN yapılmış olanlar (bunların dışında özellik uydurma; yapılmam
   - Hatalı demoda 30–45 sn'lik 4 ajanlı koşularda 22–27 farklı sorun bulundu; kritik çift ödeme denenen her koşuda yakalandı.
   - Düzeltilmiş demoda 4 ajanla kritik/yüksek sorun çıkmıyor (uçtan uca testle doğrulanıyor).
   - Canlı biyom.co'da 25 sn Güvenli keşif, 4 ajan: 399 istek gitti, aralarında yazma isteği yoktu; React hidrasyon hatası #418 (overlay olmadan da doğrulandı) ve bir CSP ihlali bulundu.
-- Testler: 36 birim testi + 5 uçtan uca koşu (tek ajanla çift ödeme, 4 ajanla güvenlik/klavye/mobil bulguları ve film şeridi, güvenli modda sıfır yazma ve sıfır hesap, düzeltilmiş sürümün sürüye dayanması, dashboard SSE + MJPEG + rapor servisi).
+- Testler: 46 birim testi + 6 uçtan uca koşu (8 ajanlı karışık sürü dahil; tek ajanla çift ödeme, 4 ajanla güvenlik/klavye/mobil bulguları ve film şeridi, güvenli modda sıfır yazma ve sıfır hesap, düzeltilmiş sürümün sürüye dayanması, dashboard SSE + MJPEG + rapor servisi).
 
 Sunum akışı: Problem (0:00–0:40), Çözüm (0:40–1:10), Canlı demo: 4 ajan, karar grafiği, kasa defterinde çift tahsilat, A4'ün şifre sızıntısı, film şeridi, Playwright testi, düzeltilmiş demo (1:10–4:00), Mimari (4:00–5:00), Güvenli mod ve biyom.co (5:00–6:00), Etki ve kapanış (6:00–7:00).
 

@@ -85,7 +85,8 @@ export class Agent {
 
   /** Context options; in headed mode the viewport follows the window tile the agent is placed in. */
   contextOptions(tile) {
-    const base = { ...this.persona.context, ignoreHTTPSErrors: true, locale: 'tr-TR' };
+    const rec = process.env.STAMPEDE_RECORD_DIR;
+    const base = { ...this.persona.context, ignoreHTTPSErrors: true, locale: 'tr-TR', ...(rec ? { recordVideo: { dir: rec, size: this.persona.context.viewport } } : {}) };
     if (!tile) return base;
     const height = Math.max(320, tile.height - WINDOW_CHROME_PX);
     const width = this.persona.touch ? Math.min(390, tile.width - 16) : Math.max(320, tile.width - 16);
