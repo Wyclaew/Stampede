@@ -22,6 +22,7 @@ const FILM_INTERVAL_MS = 150;
 const FILM_FRAMES = 32;
 const MAX_BODY_SCANS = 150;
 // A form rejecting chaotic input with 400/409/422/429 is correct behaviour, not a bug.
+const SIDE_EFFECT_ONLY = /(kopyala|copy|paylaş|share|yazdır|print|indir|download)/i;
 const VALIDATION_STATUS = new Set([400, 409, 422, 429]);
 const MONEY = /(pay|order|charge|checkout|payment|purchase|invoice|siparis|sipariş|odeme|ödeme)/i;
 
@@ -563,6 +564,8 @@ export class Agent {
     if (cand.kind === 'twinTab') this.memory.twinOn.add(this.pageKey());
     // Only a first-ever interaction without a JS error can prove a button dead.
     if (step && step.dead && (priorHits > 0 || this.counters.jsErrors !== jsErrorsBefore)) step.dead = false;
+    // Copy/share/print buttons act outside the DOM (clipboard, OS sheet), so silence is expected.
+    if (step && step.dead && cand.el && SIDE_EFFECT_ONLY.test(`${cand.el.text} ${cand.el.ariaLabel}`)) step.dead = false;
     if (step) {
       const record = { seq, agent: this.id, code: this.persona.code, at: Date.now(), ...step };
       this.log.push(record);

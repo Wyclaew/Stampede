@@ -1,11 +1,20 @@
-# 👻 RageGhost — the Impatient Ghost User
+# Stampede
 
-RageGhost attacks any web app like the most impatient human alive: it double- and triple-clicks Pay buttons, spams Back/Forward while pages load, shakes the viewport from phone to desktop, types emoji/RTL/XSS/huge numbers into every field, mashes keys and (in stress mode) pulls the Wi-Fi. While it does that, it watches the browser and turns what breaks into **reproducible bug reports and ready-to-run Playwright regression tests**.
+**A swarm of impatient users for your web app.** Stampede opens your site in four browser tabs at once, each played by a different kind of real user:
 
-- **Works on any URL, no source code needed.** Discovery, strategy and detection happen live in a real Chromium.
-- **Local-first.** No API keys, no cloud. Works offline against localhost.
-- **Fun to watch.** An animated ghost cursor with click ripples, speech bubbles and bug highlights, streamed live into a dashboard.
-- **Safe on production.** *Safe Exploration* mode blocks every non-GET request at the network layer and never clicks pay/delete/logout controls.
+| Agent | Persona | What it does |
+| --- | --- | --- |
+| A1 | Angry customer | Rage-clicks pay/submit, spams back/forward, reloads mid-request, squeezes the window to 375 px right before clicking, drops the network while paying, opens a second tab and pays twice |
+| A2 | Keyboard user | Never touches the mouse: Tab, Enter/Space, Escape. Finds invisible focus rings and controls a keyboard cannot reach |
+| A3 | Mobile user | Touch taps on a 390×844 phone, rotates the device, freezes and wakes the tab, flings the page |
+| A4 | Curious attacker | Tampers with ids in the URL, hidden form fields and browser storage, types injection payloads |
+
+While they work, Stampede watches the browser and turns every break into a **reproducible report and a ready-to-run Playwright test** (`stampede.spec.ts`).
+
+- **Any URL, no source code.** Each agent discovers the page live, labels its regions (auth, checkout, search, form, navigation) and picks moves with a seeded, weighted strategy you can watch in the decision graph.
+- **Local-first.** No API keys, no cloud, works offline against localhost. Fonts are self-hosted.
+- **Auth autopilot.** Login and sign-up forms are filled with a test identity (yours or a generated one). Third-party sign-in buttons (Google, Apple, GitHub …) are never pressed.
+- **Safe on production.** Safe mode blocks every non-GET request at the network layer and never touches pay/delete/logout controls. Mutating modes on a live host need explicit consent.
 
 > Turkish user guide: [KILAVUZ.md](KILAVUZ.md) · Pitch prep: [SUNUM_HAZIRLIK.md](SUNUM_HAZIRLIK.md)
 
@@ -16,50 +25,41 @@ npm install      # also makes sure Chromium is available
 npm start        # dashboard http://localhost:7400 + buggy demo store http://localhost:7500
 ```
 
-Pick **Demo (hatalı)**, mode **Tam Kaos**, press **Hayaleti Salıver**. Then run the same against **Demo (düzeltilmiş)** (`?fixed=1`) and compare.
-
 CLI / CI:
 
 ```bash
-node bin/rageghost.js run http://localhost:7500 --mode chaos --duration 45 --seed 7
-node bin/rageghost.js run https://example.com --mode safe --duration 90 --fail-on high
+node bin/stampede.js run http://localhost:7500 --mode chaos --personas all --duration 45 --seed 7
+node bin/stampede.js run https://example.com --mode safe --personas all --duration 90 --fail-on high
 ```
 
 ## What it detects
 
-| Detector | How |
-| --- | --- |
-| Double submit / race condition | Same mutation (method + URL + body) succeeding ≥2× within one burst; `critical` when it moves money |
-| Uncaught JS exceptions, console errors | `pageerror`, `console` |
-| 5xx / 4xx / failed / slow requests | Network events (ignores telemetry and the ghost's own blocks) |
-| Stuck spinners | Loader/`aria-busy`/skeleton elements visible beyond a timeout |
-| Mobile overflow | `scrollWidth > clientWidth`, pinpoints the offending element |
-| Obscured CTAs | `elementFromPoint` hit-testing against fixed/sticky overlays |
-| Garbage rendering | Visible `NaN`, `undefined`, `[object Object]`, `{{template}}` |
-| Dead clicks | No DOM mutation, request, URL or scroll change after a click |
-| UI freezes | Long tasks ≥ 500 ms |
-| XSS | Chaos input payload that executes |
-| White screen, tab crash | Probes + `crash` event |
+Double submits and race conditions (a duplicate is only counted when the server answered differently, so idempotent replays pass) · uncaught exceptions and console errors · 5xx / 4xx / failed / slow requests · stuck spinners · horizontal overflow · controls covered by floating widgets · `NaN` / `undefined` / `[object Object]` on screen · dead buttons · long tasks · layout shift (CLS) · DOM growth leaks · XSS execution · secrets in the console · sensitive fields in API responses · session cookies without HttpOnly/Secure/SameSite · invisible focus · keyboard-unreachable controls · UI that crashes on a corrupted API answer (stress mode).
 
 ## Architecture
 
 ```
-public/            dashboard (vanilla JS, SSE)          demo/   "Fincan" coffee shop with 10 deliberate bugs (+ ?fixed=1 twin)
-src/server/        HTTP API + Server-Sent Events        bin/    CLI for terminals & CI
 src/engine/
-  session.js       run loop, monitors, issue capture, CDP screencast
-  strategy.js      weighted, seeded action choice (money CTAs first, unseen pages, de-duplicated grids)
-  actions.js       rage click, chaos typing, back/forward spam, viewport shake, scroll, keys, F5, offline
-  safety.js        modes, element risk classification, production guard
-  inject/          in-page ghost overlay + discovery/probe functions
-src/report/        HTML / Markdown / JSON report + Playwright spec generator
+  session.js        runs the swarm, shared issue store, film strips, report
+  agent.js          one persona in its own browser context: monitors, screencast, decide → act → probe loop
+  strategy.js       candidate moves, weights, zones, seeded choice (the "brain")
+  personas.js       the four user types
+  actions.js        rage click, chaos typing, back/forward, viewport shake, scroll, keys, F5, offline
+  actions-extra.js  keyboard walk, rotate, sleep/wake, URL/hidden/storage tampering, auth autopilot, twin tab, slow 3G
+  detectors.js      pure detectors (probe results, DOM growth, secrets, cookies)
+  safety.js         modes, element risk + OAuth classification, production guard
+  inject/           in-page overlay (agent cursor, reticles, markers) and probe functions
+src/server/         HTTP API, Server-Sent Events, MJPEG live view per agent
+src/report/         self-contained HTML, Markdown, JSON and Playwright TypeScript spec
+public/             dashboard (vanilla JS, canvas decision graph)
+demo/               "Fincan" coffee shop with deliberate bugs (+ ?fixed=1 twin)
 ```
 
 ## Tests
 
 ```bash
-npm test          # unit tests (node:test)
-npm run test:e2e  # real Chromium against the demo: buggy, safe and fixed runs + dashboard SSE flow
+npm test          # 36 unit tests (node:test)
+npm run test:e2e  # 5 end-to-end runs against the demo in real Chromium
 ```
 
 MIT licensed.

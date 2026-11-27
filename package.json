@@ -1,7 +1,7 @@
 {
   "name": "stampede",
-  "version": "1.0.0",
-  "description": "Stampede - the Impatient Ghost User. A local-first chaos tester that attacks any web app like the most impatient human and turns real bugs into reproducible reports and Playwright regression tests.",
+  "version": "2.0.0",
+  "description": "Stampede: a local-first swarm of impatient users (angry customer, keyboard, mobile, attacker) that breaks web apps and turns every bug into a report and a Playwright test.",
   "type": "module",
   "license": "MIT",
   "bin": {

@@ -334,6 +334,8 @@ export function runProbes(opts) {
     // Full-width headers / bottom bars: content scrolled under them is still reachable by scrolling.
     const isEdgeBar = cr.width >= innerWidth * 0.9 && (cr.top <= 2 || cr.bottom >= innerHeight - 2) && cr.height < innerHeight * 0.35;
     if (isEdgeBar) continue;
+    // A full-screen overlay is an open modal/backdrop: what is behind it is meant to be unreachable.
+    if (cr.width * cr.height >= innerWidth * innerHeight * 0.85) continue;
     // Transient notifications (toasts, live regions) are meant to float briefly.
     const role = cov.getAttribute('role') || '';
     const covCls = typeof cov.className === 'string' ? cov.className : '';
