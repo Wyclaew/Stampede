@@ -111,6 +111,7 @@ export class GhostSession extends EventEmitter {
     await quiet(this.page.waitForLoadState('load', { timeout: 6000 }));
     this.lastGoodUrl = this.page.url();
     this.memory.visited.add(normalizeVisitKey(this.lastGoodUrl));
+    await sleep(500); // overlay mounts shortly after load
     await quiet(this.page.mouse.move(640, 400));
     await quiet(this.page.evaluate(ghostSay, { text: 'Bööö! Sabırsız hayalet geldi 👻' }));
   }

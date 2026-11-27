@@ -62,7 +62,12 @@ export async function rageClick(ctx, cand) {
   const after = await quiet(page.evaluate(readCounters));
   const step = { ...baseStep(ctx, 'rageClick', el), count, label: `${humanName(el)} ${count} kez hızlıca tıkla` };
   const reacted =
-    !before || !after || after.mutations !== before.mutations || after.url !== before.url || ctx.counters.requests !== reqBefore;
+    !before ||
+    !after ||
+    after.mutations !== before.mutations ||
+    after.url !== before.url ||
+    after.scroll !== before.scroll ||
+    ctx.counters.requests !== reqBefore;
   const isButtonish = el.tag === 'button' || el.role === 'button' || (el.tag === 'input' && ['button', 'submit'].includes(el.type));
   if (!reacted && isButtonish && !pt.blocked) step.dead = true;
   return step;

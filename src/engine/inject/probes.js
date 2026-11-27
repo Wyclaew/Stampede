@@ -25,7 +25,7 @@ export function discoverElements() {
     const label = el.labels && el.labels[0] ? el.labels[0].innerText : '';
     const raw =
       (tag === 'input' || tag === 'textarea' || tag === 'select'
-        ? el.getAttribute('aria-label') || label || el.getAttribute('placeholder') || el.getAttribute('name')
+        ? el.getAttribute('aria-label') || el.getAttribute('placeholder') || (/[\p{L}\p{N}]/u.test(label) ? label : '') || el.getAttribute('name') || label
         : el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || el.value) || '';
     const form = el.form || el.closest('form');
     out.push({
@@ -92,7 +92,7 @@ export function findClickablePoint(id) {
 }
 
 export function readCounters() {
-  return window.__rageghost ? window.__rageghost.counters() : { mutations: 0, url: location.href };
+  return window.__rageghost ? window.__rageghost.counters() : { mutations: 0, url: location.href, scroll: 0 };
 }
 
 /**

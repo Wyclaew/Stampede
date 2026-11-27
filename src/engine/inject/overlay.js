@@ -49,7 +49,16 @@
     <ellipse cx="11" cy="31" rx="2.6" ry="1.6" fill="#f9a8d4" opacity=".8"/><ellipse cx="35" cy="31" rx="2.6" ry="1.6" fill="#f9a8d4" opacity=".8"/>
   </svg>`;
 
+  // Mount only after load (+ a beat) so frameworks that hydrate the whole document (Next.js App Router)
+  // never see a foreign node during hydration.
+  let ready = false;
+  const markReady = () => setTimeout(() => { ready = true; }, 400);
+  if (document.readyState === 'complete') markReady();
+  else window.addEventListener('load', markReady, { once: true });
+  setTimeout(() => { ready = true; }, 6000);
+
   function mount() {
+    if (!ready) return;
     if (host && host.isConnected) return;
     const parent = document.documentElement;
     if (!parent) return;
@@ -190,11 +199,9 @@
     say,
     mark,
     place,
-    counters: () => ({ mutations: state.mutations, url: location.href }),
+    counters: () => ({ mutations: state.mutations, url: location.href, scroll: Math.round(window.scrollX + window.scrollY * 3) }),
     drainLongTasks: () => state.longTasks.splice(0, state.longTasks.length),
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
-  else mount();
   setInterval(mount, 1000);
 })();
