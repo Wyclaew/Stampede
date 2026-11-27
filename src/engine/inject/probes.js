@@ -181,8 +181,9 @@ export function runProbes(opts) {
     }
     if (!cov || cov === body) continue;
     const cr = cov.getBoundingClientRect();
-    const isTopBar = cr.top <= 2 && cr.height < innerHeight * 0.3;
-    if (isTopBar) continue;
+    // Full-width headers / bottom bars: content scrolled under them is still reachable by scrolling.
+    const isEdgeBar = cr.width >= innerWidth * 0.9 && (cr.top <= 2 || cr.bottom >= innerHeight - 2) && cr.height < innerHeight * 0.35;
+    if (isEdgeBar) continue;
     const key = tagEl(cov);
     byCoverer.set(key, (byCoverer.get(key) || 0) + 1);
     covered.push({ id: tagEl(el), desc: desc(el), text: textOf(el), cta: CTA.test(textOf(el)), coverer: { id: key, desc: desc(cov), text: textOf(cov) }, rect: rectOf(el) });

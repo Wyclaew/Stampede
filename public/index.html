@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RageGhost · Sabırsız Hayalet Kullanıcı</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">👻</div>
+      <div>
+        <h1>Rage<span>Ghost</span></h1>
+        <p>Sabırsız Hayalet Kullanıcı · uygulamanızı en sabırsız insan gibi kırar, hatayı tekrar üretilebilir rapora çevirir</p>
+      </div>
+    </div>
+    <div class="conn" id="conn"><span class="dot"></span><span id="connText">Bağlanıyor…</span></div>
+  </header>
+
+  <section class="controls" aria-label="Çalıştırma ayarları">
+    <div class="row">
+      <label class="field grow">
+        <span>Hedef URL</span>
+        <input id="url" type="url" value="http://localhost:4500/" spellcheck="false" autocomplete="off">
+      </label>
+      <div class="presets">
+        <button class="chip-btn" data-url="http://localhost:4500/">🐞 Demo (hatalı)</button>
+        <button class="chip-btn" data-url="http://localhost:4500/?fixed=1">✅ Demo (düzeltilmiş)</button>
+        <button class="chip-btn" data-url="https://biyom.co/" data-mode="safe">🌐 biyom.co</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="modes" role="radiogroup" aria-label="Mod">
+        <label class="mode safe"><input type="radio" name="mode" value="safe"><b>🛡️ Güvenli Keşif</b><small>Canlı siteler için. POST/PUT/DELETE engellenir, ödeme/sil butonlarına dokunmaz.</small></label>
+        <label class="mode chaos"><input type="radio" name="mode" value="chaos" checked><b>🌪️ Tam Kaos</b><small>Lokal/staging. Çift tık, form spam, geri/ileri, kaotik girdi.</small></label>
+        <label class="mode stress"><input type="radio" name="mode" value="stress"><b>💥 Stres / Yıkım</b><small>Sadece lokal. ×8 tık, CPU yavaşlatma, Wi-Fi kopması.</small></label>
+      </div>
+      <div class="side-fields">
+        <label class="field"><span>Süre</span>
+          <select id="duration"><option value="20">20 sn</option><option value="30">30 sn</option><option value="45" selected>45 sn</option><option value="60">60 sn</option><option value="120">2 dk</option><option value="300">5 dk</option></select>
+        </label>
+        <label class="field"><span>Seed</span><input id="seed" type="number" placeholder="rastgele" inputmode="numeric"></label>
+        <label class="toggle"><input id="headed" type="checkbox"><span>Gerçek tarayıcı penceresi</span></label>
+      </div>
+    </div>
+    <label class="live-confirm" id="liveConfirm" hidden>
+      <input id="confirmLive" type="checkbox">
+      <span>⚠️ Bu canlı bir site. Seçilen mod gerçek sipariş/form/ödeme isteği gönderebilir. <b>Sitenin sahibiyim ve buna izin veriyorum.</b></span>
+    </label>
+    <div class="row actions">
+      <button id="start" class="primary">👻 Hayaleti Salıver</button>
+      <button id="stop" class="danger" disabled>■ Durdur</button>
+      <p id="formError" class="form-error" role="alert"></p>
+    </div>
+  </section>
+
+  <main class="stage">
+    <section class="viewer" aria-label="Canlı görüntü">
+      <div class="browser-bar">
+        <span class="lights"><i></i><i></i><i></i></span>
+        <span class="addr" id="addr">—</span>
+        <span class="vp" id="vp">1280×800</span>
+      </div>
+      <div class="screen" id="screen">
+        <img id="frame" alt="Hedef sayfanın canlı görüntüsü" hidden>
+        <div class="idle" id="idle">
+          <div class="big-ghost">👻</div>
+          <h2>Hayalet hazır.</h2>
+          <p>Bir URL seçin ve <b>Hayaleti Salıver</b>'e basın. Hayalet sayfayı kendi keşfeder; kaynak koda ihtiyaç yok.</p>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="ticker" id="ticker">Bekleniyor…</div>
+        <div class="progress"><div id="progress"></div></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="scoreboard">
+        <div class="gauge">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" class="track"/><circle cx="60" cy="60" r="50" class="value" id="gaugeArc"/></svg>
+          <div class="gauge-text"><b id="score">100</b><small id="grade">Dayanıklılık</small></div>
+        </div>
+        <div class="sev-grid">
+          <div class="sev critical"><b id="cCritical">0</b><small>Kritik</small></div>
+          <div class="sev high"><b id="cHigh">0</b><small>Yüksek</small></div>
+          <div class="sev medium"><b id="cMedium">0</b><small>Orta</small></div>
+          <div class="sev low"><b id="cLow">0</b><small>Düşük</small></div>
+        </div>
+      </div>
+      <div class="stats">
+        <div><b id="sActions">0</b><small>aksiyon</small></div>
+        <div><b id="sClicks">0</b><small>tık</small></div>
+        <div><b id="sRequests">0</b><small>istek</small></div>
+        <div><b id="sBlocked">0</b><small>engellenen</small></div>
+        <div><b id="sPages">0</b><small>sayfa</small></div>
+      </div>
+
+      <div class="done" id="done" hidden>
+        <div><b>Rapor hazır</b><small id="doneText"></small></div>
+        <div class="done-links" id="doneLinks"></div>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" class="active" data-tab="issues">Sorunlar <span id="tIssues">0</span></button>
+        <button role="tab" data-tab="feed">Canlı akış</button>
+        <button role="tab" data-tab="anoms">Ağ &amp; Konsol <span id="tAnoms">0</span></button>
+      </nav>
+      <div class="panel" id="panel-issues"><p class="placeholder">Henüz sorun yok. Hayalet sabırsızlanıyor…</p></div>
+      <div class="panel" id="panel-feed" hidden></div>
+      <div class="panel" id="panel-anoms" hidden></div>
+    </aside>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

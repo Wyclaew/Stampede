@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fincan · Nitelikli Kahve</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="promo"><div class="promo-track">☕ Bugün tüm siparişlerde kargo bedava · FINCAN10 koduyla %10 indirim · Yeni hasat Etiyopya stokta · Aynı gün kavrum, ertesi gün kapında</div></div>
+  <header class="site-head">
+    <a href="#/" class="logo" data-link>Fin<span>can</span></a>
+    <nav aria-label="Ana menü">
+      <a href="#/" data-link>Mağaza</a>
+      <a href="#/checkout" data-link>Sepet <span class="badge" id="cartBadge">…</span></a>
+      <a href="#/orders" data-link>Kasa defteri</a>
+    </nav>
+    <span class="loader" id="globalLoader" hidden aria-label="Yükleniyor"></span>
+    <span class="build" id="buildTag"></span>
+  </header>
+
+  <main id="view"></main>
+
+  <button class="chat" id="chat" type="button">💬 <span>Yardım lazım mı?</span></button>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <template id="tpl-shop">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Yeni hasat · 2026</p>
+        <h1>Sabahın ilk yudumu,<br><em>özenle kavruldu.</em></h1>
+        <p class="lede">Küçük çiftliklerden nitelikli çekirdekler. Siparişin 24 saat içinde kapında.</p>
+        <a class="cta" href="#/checkout" data-link>Ödemeye geç →</a>
+      </div>
+      <div class="hero-art" aria-hidden="true">☕</div>
+    </section>
+    <section class="toolbar">
+      <label class="search"><span>🔎</span><input id="search" type="search" placeholder="Kahve ara…" autocomplete="off"></label>
+      <select id="sort" aria-label="Sırala">
+        <option value="featured">Önerilen</option>
+        <option value="asc">Fiyat (artan)</option>
+        <option value="desc">Fiyat (azalan)</option>
+      </select>
+    </section>
+    <p class="search-status" id="searchStatus"></p>
+    <section class="grid" id="grid"></section>
+    <section class="recs">
+      <h2>Senin için önerilenler</h2>
+      <div class="recs-row" id="recs"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    </section>
+  </template>
+
+  <template id="tpl-checkout">
+    <section class="checkout">
+      <div class="col">
+        <h1>Sepetin</h1>
+        <div id="lines" class="lines"></div>
+        <div class="coupon">
+          <input id="coupon" type="text" placeholder="Kupon kodu (örn. FINC10)" autocomplete="off">
+          <button id="applyCoupon" type="button" class="ghost-btn">Uygula</button>
+        </div>
+        <p class="coupon-msg" id="couponMsg"></p>
+        <h2>Kargo seçenekleri</h2>
+        <table class="shipping">
+          <thead><tr><th>Seçenek</th><th>Süre</th><th>Taşıyıcı</th><th>Takip</th><th>Ücret</th></tr></thead>
+          <tbody>
+            <tr><td><label><input type="radio" name="ship" checked> Standart</label></td><td>1-2 iş günü</td><td>Yurtiçi Express Plus</td><td>SMS + e-posta</td><td>Bedava</td></tr>
+            <tr><td><label><input type="radio" name="ship"> Aynı gün</label></td><td>Bugün 21:00'e kadar</td><td>Kurye Ağı İstanbul</td><td>Canlı harita</td><td>₺89</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <aside class="summary">
+        <h2>Özet</h2>
+        <dl>
+          <div><dt>Ara toplam</dt><dd id="subtotal">—</dd></div>
+          <div><dt>İndirim</dt><dd id="discount">₺0</dd></div>
+          <div class="total"><dt>Toplam</dt><dd id="total">—</dd></div>
+        </dl>
+        <div class="paybar">
+          <button id="pay" type="button" class="pay">Öde</button>
+          <p class="secure">🔒 256-bit güvenli ödeme</p>
+        </div>
+      </aside>
+    </section>
+  </template>
+
+  <template id="tpl-orders">
+    <section class="orders">
+      <h1>Kasa defteri</h1>
+      <p class="lede">Ödeme sağlayıcısından gelen gerçek tahsilatlar.</p>
+      <div class="ledger-total"><span>Toplam tahsil edilen</span><b id="charged">₺0</b></div>
+      <ol class="ledger" id="ledger"></ol>
+      <button type="button" class="danger" id="wipe">Tüm demo verilerini sil</button>
+    </section>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
