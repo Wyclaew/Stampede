@@ -2,7 +2,8 @@
 // Never include literal "undefined"/"NaN"/"null" here: the garbage-text detector looks for those.
 
 export const XSS_MARKER = 'RG_XSS_7731';
-export const XSS_PAYLOAD = `"><img src=x onerror="console.log('${XSS_MARKER}')">`;
+// Empty src fires onerror without any network request (so the probe never causes a 404 of its own).
+export const XSS_PAYLOAD = `"><img src onerror="console.log('${XSS_MARKER}')">`;
 
 const TEXT = [
   '',

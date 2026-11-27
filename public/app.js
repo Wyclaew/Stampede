@@ -268,5 +268,18 @@ function connect() {
   });
 }
 
+async function applyConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const { demoUrl } = (await res.json()).data;
+    document.querySelectorAll('.chip-btn[data-url*="localhost:7500"]').forEach((b) => {
+      b.dataset.url = b.dataset.url.replace('http://localhost:7500', demoUrl);
+    });
+    if (urlInput.value.startsWith('http://localhost:7500')) urlInput.value = `${demoUrl}/`;
+  } catch {
+    /* keep static defaults */
+  }
+}
+
 connect();
-refreshLiveGuard();
+applyConfig().then(refreshLiveGuard);

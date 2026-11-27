@@ -162,7 +162,7 @@
       } else if (v === 'desc') list.sort(function (a, b) { return b.price - a.price; });
       paintGrid(list);
     });
-    api('/api/recommendations').then(function (recs) {
+    api(FIXED ? '/api/recommendations?cached=1' : '/api/recommendations').then(function (recs) {
       var row = document.getElementById('recs');
       if (!row) return;
       row.replaceChildren.apply(row, recs.map(function (p) {

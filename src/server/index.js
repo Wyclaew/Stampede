@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GhostSession, stripHeavy } from '../engine/session.js';
 import { MODES, isLocalUrl } from '../engine/safety.js';
 import { writeReport } from '../report/index.js';
+import { listenWithFallback } from '../util/listen.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..', '..');
@@ -54,7 +55,7 @@ export function parseRunRequest(body) {
   return { url, mode, durationSec, seed, headed: body.headed === true, confirmLive: body.confirmLive === true };
 }
 
-export function createDashboardServer() {
+export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http://localhost:7500' } = {}) {
   const clients = new Set();
   let session = null;
   let lastReport = null;
@@ -149,6 +150,9 @@ export function createDashboardServer() {
         });
         return undefined;
       }
+      if (req.method === 'GET' && path === '/api/config') {
+        return ok(res, { demoUrl: demoUrl.replace(/\/$/, '') });
+      }
       if (req.method === 'GET' && path === '/api/modes') {
         return ok(res, Object.values(MODES).map((m) => ({ id: m.id, label: m.label })));
       }
@@ -182,15 +186,12 @@ export function createDashboardServer() {
   return { server, stopSession: () => session && session.stop() };
 }
 
-export function startDashboard(port = Number(process.env.PORT) || 4400) {
-  const { server } = createDashboardServer();
-  return new Promise((resolveStart, reject) => {
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') reject(new Error(`Port ${port} kullanımda. Başka port: PORT=4401 npm start`));
-      else reject(err);
-    });
-    server.listen(port, '127.0.0.1', () => resolveStart({ server, port, url: `http://localhost:${port}` }));
-  });
+export const DEFAULT_DASHBOARD_PORT = 7400;
+
+export async function startDashboard({ port: preferred = Number(process.env.PORT) || DEFAULT_DASHBOARD_PORT, demoUrl } = {}) {
+  const { server } = createDashboardServer({ demoUrl });
+  const port = await listenWithFallback(server, preferred);
+  return { server, port, url: `http://localhost:${port}` };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

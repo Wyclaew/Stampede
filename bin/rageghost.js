@@ -26,7 +26,7 @@ Seçenekler:
   --fail-on <seviye>          Bu seviyede sorun bulunursa çıkış kodu 1 (CI için): critical|high|medium|low
 
 Örnekler:
-  rageghost run http://localhost:4500 --mode chaos --duration 30
+  rageghost run http://localhost:7500 --mode chaos --duration 30
   rageghost run https://biyom.co --mode safe --duration 90
 `;
 

@@ -2,6 +2,8 @@
 import { classifyElement, isAllowed } from './safety.js';
 
 const MAX_TYPES_PER_FIELD = 3;
+// Money-moving actions are where impatience hurts most: they get priority.
+const MONEY = /(pay|checkout|purchase|buy|order|öde|satın|sipariş|kasa|sepet|cart)/i;
 
 export function normalizeVisitKey(url) {
   try {
@@ -27,7 +29,9 @@ export function buildCandidates({ elements, mode, origin, memory, pageKey }) {
     if (!el.inViewport && memory.actionsOnPage < 2) continue; // start with what's on screen
     const cls = classifyElement(el, origin);
     if (!isAllowed(cls.category, mode)) continue;
-    const hitKey = `${pageKey}|${el.id}|${el.text}`;
+    // Same-labelled controls ("Add to cart" ×12) share one memory slot; fields are tracked individually.
+    const hitKey = `${pageKey}|${el.editable || !el.text ? el.id : el.text}`;
+    const money = MONEY.test(`${el.text} ${el.ariaLabel}`);
     const hits = memory.hits.get(hitKey) || 0;
     const penalty = 1 + hits * 1.6;
     switch (cls.category) {
@@ -46,11 +50,11 @@ export function buildCandidates({ elements, mode, origin, memory, pageKey }) {
         const href = el.absHref || '';
         if (!href || el.href === '#' || el.target === '_blank') break;
         const unseen = !memory.visited.has(normalizeVisitKey(href));
-        out.push({ kind: 'navigate', el, cls, hitKey, weight: (unseen ? 5 : 1) / penalty });
+        out.push({ kind: 'navigate', el, cls, hitKey, weight: ((unseen ? 5 : 1) * (money ? 1.6 : 1)) / penalty });
         break;
       }
       case 'transactional':
-        out.push({ kind: 'rageClick', el, cls, hitKey, weight: 10 / penalty });
+        out.push({ kind: 'rageClick', el, cls, hitKey, money, weight: (money ? 14 : 8) / penalty });
         break;
       case 'destructive':
         out.push({ kind: 'rageClick', el, cls, hitKey, weight: 0.8 / penalty });
@@ -72,12 +76,24 @@ export function buildCandidates({ elements, mode, origin, memory, pageKey }) {
   return out.map((c) => (c.kind === memory.lastKind && !c.el ? { ...c, weight: c.weight * 0.3 } : c));
 }
 
+/** Collapse candidates that share kind + label into one (picked at random), so a grid of 12
+ * identical buttons does not drown out the single "Pay" button. */
+export function collapseDuplicates(candidates, rng) {
+  const groups = new Map();
+  for (const c of candidates) {
+    const key = c.el && c.el.text && !c.el.editable ? `${c.kind}|${c.el.text}` : `${c.kind}|${c.el ? c.el.id : ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  return [...groups.values()].map((g) => (g.length === 1 ? g[0] : rng.pick(g)));
+}
+
 export function chooseAction(params, rng) {
-  const candidates = buildCandidates(params);
-  // Opening act: the first action on a fresh page is the CTA a real impatient user goes for.
+  const candidates = collapseDuplicates(buildCandidates(params), rng);
+  // Opening act: on a fresh page the ghost goes straight for the money button, like a real impatient user.
   if (params.memory.actionsOnPage === 0) {
     const cta = candidates.filter((c) => c.cls && c.cls.isCTA).sort((a, b) => b.weight - a.weight)[0];
-    if (cta && rng.chance(0.6)) return cta;
+    if (cta && rng.chance(0.7)) return cta;
   }
   return rng.weighted(candidates);
 }

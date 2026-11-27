@@ -4,6 +4,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { listenWithFallback } from '../src/util/listen.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, 'public');
@@ -100,7 +101,8 @@ export function createDemoServer(state = createDemoState()) {
       }
 
       if (path === '/api/recommendations' && req.method === 'GET') {
-        await sleep(3400); // BUG: slow endpoint on the home page
+        // BUG: slow endpoint on the home page (the fixed client asks for the cached variant)
+        await sleep(url.searchParams.has('cached') ? 120 : 3400);
         return json(res, 200, PRODUCTS.slice(0, 3));
       }
 
@@ -129,12 +131,12 @@ export function createDemoServer(state = createDemoState()) {
   return { server, state };
 }
 
-export function startDemo(port = Number(process.env.DEMO_PORT) || 4500) {
+export const DEFAULT_DEMO_PORT = 7500;
+
+export async function startDemo(preferred = Number(process.env.DEMO_PORT) || DEFAULT_DEMO_PORT) {
   const { server, state } = createDemoServer();
-  return new Promise((resolve, reject) => {
-    server.once('error', (err) => reject(err.code === 'EADDRINUSE' ? new Error(`Port ${port} kullanımda. Başka port: DEMO_PORT=4501`) : err));
-    server.listen(port, '127.0.0.1', () => resolve({ server, state, port, url: `http://localhost:${port}` }));
-  });
+  const port = await listenWithFallback(server, preferred);
+  return { server, state, port, url: `http://localhost:${port}` };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -16,7 +16,7 @@ function openBrowser(url) {
 
 async function main() {
   const demo = await startDemo();
-  const dash = await startDashboard();
+  const dash = await startDashboard({ demoUrl: demo.url });
   const out = [
     '',
     '  👻  RageGhost hazır',

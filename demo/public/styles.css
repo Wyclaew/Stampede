@@ -103,6 +103,8 @@ select { padding: 11px 14px; border-radius: 14px; border: 1px solid var(--line);
 .danger { border: 1px solid #b91c1c; color: #b91c1c; background: transparent; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 
 .chat { position: fixed; right: 18px; bottom: 18px; z-index: 20; display: flex; align-items: center; gap: 8px; padding: 12px 18px; border: 0; border-radius: 999px; background: var(--sage); color: #fff; font-weight: 700; box-shadow: 0 12px 30px rgba(95, 122, 97, 0.45); cursor: pointer; }
+/* Fixed build: support lives in the page flow instead of floating over call-to-action buttons. */
+.fixed .chat { position: static; margin: 0 auto 32px; box-shadow: none; width: max-content; }
 .toast { position: fixed; left: 50%; top: 86px; transform: translateX(-50%); z-index: 30; padding: 12px 20px; border-radius: 14px; background: var(--espresso); color: var(--cream); font-weight: 600; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25); }
 
 @media (max-width: 760px) {
@@ -118,6 +120,13 @@ select { padding: 11px 14px; border-radius: 14px; border: 1px solid var(--line);
   .paybar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 12px 16px; background: var(--paper); border-top: 1px solid var(--line); }
   /* BUG #5 (obscured CTA): on phones the chat pill grows into a bar sitting on top of the pay button. */
   .chat { left: auto; right: 12px; bottom: 14px; width: 70%; justify-content: center; }
-  .fixed .chat { width: auto; bottom: 104px; padding: 12px; }
-  .fixed .chat span { display: none; }
+  .fixed .chat { width: max-content; }
+}
+
+/* Fixed build: let grid columns shrink and drop non-essential shipping columns on phones. */
+.fixed .checkout > * { min-width: 0; }
+@media (max-width: 480px) {
+  .fixed .shipping th:nth-child(3), .fixed .shipping td:nth-child(3),
+  .fixed .shipping th:nth-child(4), .fixed .shipping td:nth-child(4) { display: none; }
+  .fixed .line { grid-template-columns: 28px minmax(0, 1fr) 56px 76px; gap: 8px; }
 }

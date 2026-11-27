@@ -165,7 +165,7 @@ export function assertRunAllowed({ url, modeId, confirmLive }) {
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error(`Geçersiz URL: "${url}". Örnek: http://localhost:4500 veya https://biyom.co`);
+    throw new Error(`Geçersiz URL: "${url}". Örnek: http://localhost:7500 veya https://biyom.co`);
   }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('Sadece http:// ve https:// adresleri desteklenir.');

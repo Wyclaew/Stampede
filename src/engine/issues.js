@@ -92,7 +92,7 @@ export function normalizePath(url) {
   try {
     const u = new URL(url);
     const path = u.pathname.replace(/\/\d+(?=\/|$)/g, '/:id').replace(/\/[0-9a-f]{16,}(?=\/|$)/gi, '/:hash');
-    const hash = u.hash.replace(/\/\d+(?=\/|$)/g, '/:id');
+    const hash = u.hash === '#/' || u.hash === '#' ? '' : u.hash.replace(/\/\d+(?=\/|$)/g, '/:id');
     return `${path}${hash}`;
   } catch {
     return String(url);
@@ -102,6 +102,7 @@ export function normalizePath(url) {
 export function normalizeMessage(msg) {
   return String(msg)
     .replace(/https?:\/\/\S+/g, '<url>')
+    .replace(/\?\S*/g, '?…')
     .replace(/\d+/g, '#')
     .slice(0, 200);
 }

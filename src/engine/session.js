@@ -152,7 +152,8 @@ export class GhostSession extends EventEmitter {
       }
       this.reqMeta.set(req, { ts: Date.now(), method: req.method(), url: req.url(), type: req.resourceType(), postData: postData ? postData.slice(0, 500) : null });
     });
-    page.on('requestfinished', (req) => quiet(this.onRequestFinished(req)));
+    // 'response' fires at headers; 'requestfinished' never fires when the app does not read the body.
+    page.on('response', (res) => this.onResponse(res));
     page.on('requestfailed', (req) => this.onRequestFailed(req));
     page.on('pageerror', (err) => this.onPageError(err));
     page.on('console', (msg) => this.onConsole(msg));
@@ -166,11 +167,9 @@ export class GhostSession extends EventEmitter {
     });
   }
 
-  async onRequestFinished(req) {
-    const meta = this.reqMeta.get(req);
+  onResponse(res) {
+    const meta = this.reqMeta.get(res.request());
     if (!meta) return;
-    const res = await req.response();
-    if (!res) return;
     const status = res.status();
     const duration = Date.now() - meta.ts;
     const path = normalizePath(meta.url);
@@ -313,7 +312,7 @@ export class GhostSession extends EventEmitter {
       url: page ? page.url() : this.config.url,
       viewport: page ? page.viewportSize() : null,
       triggerSeq: this.currentAction ? this.currentAction.seq : this.counters.actions,
-      trigger: this.currentAction ? this.currentAction.label : 'sayfa yüklenirken',
+      trigger: this.currentAction ? this.currentAction.label : this.counters.actions ? 'arka plan kontrolü' : 'sayfa yüklenirken',
       detectedAt: Date.now(),
     };
     const { issue, isNew } = this.issues.add(enriched);
@@ -378,7 +377,7 @@ export class GhostSession extends EventEmitter {
       this.addIssue({
         type: 'layout-overflow',
         severity: extra > 80 ? 'high' : 'medium',
-        fingerprint: `overflow|${path}|${c.desc}`,
+        fingerprint: `overflow|${c.desc}`,
         detail: `${vp} ekranda sayfa ${extra}px taşıyor. Taşan eleman: ${c.desc}${c.text ? ` (“${c.text.slice(0, 40)}”)` : ''}.`,
         evidence: r.overflow.culprits.map((x) => `${x.desc} → ekranın ${x.by}px dışına çıkıyor`).concat([`document.scrollWidth=${r.overflow.scrollWidth}, viewport=${r.overflow.viewportWidth}`, reason ? `tetik: ${reason}` : null].filter(Boolean)),
         elementId: c.id,
@@ -398,16 +397,20 @@ export class GhostSession extends EventEmitter {
         selectorHint: o.desc,
       });
     }
-    for (const g of r.garbage) {
+    const byToken = new Map();
+    for (const g of r.garbage) byToken.set(g.token, [...(byToken.get(g.token) || []), g]);
+    for (const [token, list] of byToken) {
+      const g = list[0];
+      const texts = [...new Set(list.map((x) => `“${x.text}”`))].slice(0, 4).join(', ');
       this.addIssue({
         type: 'garbage-render',
-        severity: /[₺$€£]|\d/.test(g.text) ? 'high' : 'medium',
-        fingerprint: `garbage|${g.token}|${g.desc}`,
-        detail: `Ekranda “${g.text}” görünüyor (${g.token}).`,
-        evidence: [`${g.desc}: “${g.text}”`],
+        severity: list.some((x) => /[₺$€£]|\d/.test(x.text)) ? 'high' : 'medium',
+        fingerprint: `garbage|${token}|${path}`,
+        detail: `Ekranda ${list.length} yerde ham “${token}” değeri görünüyor: ${texts}.`,
+        evidence: list.map((x) => `${x.desc}: “${x.text}”`),
         elementId: g.id,
         rect: g.rect,
-        token: g.token,
+        token,
       });
     }
     for (const s of r.spinners) {
@@ -501,10 +504,16 @@ export class GhostSession extends EventEmitter {
     this.emit('action', { seq, kind: cand.kind, label: preview, phase: 'start', at: Date.now() });
     const ctx = { page: this.page, context: this.context, rng: this.rng, mode: this.mode, counters: this.counters, probe: (r) => this.probe(r) };
     if (cand.kind === 'offline') this.offlineUntil = Date.now() + 2500;
+    const jsErrorsBefore = this.counters.jsErrors;
     const step = await withTimeout(quiet(ACTIONS[cand.kind](ctx, cand)), ACTION_TIMEOUT_MS);
+    // A click that threw an exception is a crash, not a dead button.
+    if (step && step.dead && this.counters.jsErrors !== jsErrorsBefore) step.dead = false;
     this.counters.actions = seq;
     this.memory.lastKind = cand.kind;
-    if (cand.hitKey) this.memory.hits.set(cand.hitKey, (this.memory.hits.get(cand.hitKey) || 0) + 1);
+    const priorHits = cand.hitKey ? this.memory.hits.get(cand.hitKey) || 0 : 0;
+    if (cand.hitKey) this.memory.hits.set(cand.hitKey, priorHits + 1);
+    // Only a first-ever interaction can prove a button dead (a repeat may legitimately re-render identical content).
+    if (step && step.dead && priorHits > 0) step.dead = false;
     if (cand.kind === 'viewport') this.memory.viewportShakenOn.add(normalizeVisitKey(this.page.url()));
     if (step) {
       const record = { seq, at: Date.now(), ...step };

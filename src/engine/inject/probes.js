@@ -184,6 +184,10 @@ export function runProbes(opts) {
     // Full-width headers / bottom bars: content scrolled under them is still reachable by scrolling.
     const isEdgeBar = cr.width >= innerWidth * 0.9 && (cr.top <= 2 || cr.bottom >= innerHeight - 2) && cr.height < innerHeight * 0.35;
     if (isEdgeBar) continue;
+    // Transient notifications (toasts, live regions) are meant to float briefly.
+    const role = cov.getAttribute('role') || '';
+    const covCls = typeof cov.className === 'string' ? cov.className : '';
+    if (/^(status|alert|log|tooltip)$/.test(role) || cov.hasAttribute('aria-live') || /toast|snack|notif|tooltip/i.test(covCls)) continue;
     const key = tagEl(cov);
     byCoverer.set(key, (byCoverer.get(key) || 0) + 1);
     covered.push({ id: tagEl(el), desc: desc(el), text: textOf(el), cta: CTA.test(textOf(el)), coverer: { id: key, desc: desc(cov), text: textOf(cov) }, rect: rectOf(el) });
