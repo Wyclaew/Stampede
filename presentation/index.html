@@ -5,8 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stampede · sunum</title>
 <style>
+@font-face{font-family:'Schibsted Grotesk';font-weight:400 900;font-display:swap;src:url('../node_modules/@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-normal.woff2') format('woff2')}
+@font-face{font-family:'Schibsted Grotesk';font-weight:400 900;font-display:swap;src:url('../node_modules/@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-ext-wght-normal.woff2') format('woff2');unicode-range:U+0100-02AF}
+@font-face{font-family:'JetBrains Mono';font-weight:100 800;font-display:swap;src:url('../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2') format('woff2')}
 :root{--bg:#0b1015;--panel:#151a20;--line:#2a323b;--text:#e4e8ed;--muted:#9ba6b1;--signal:#5aea98;--crit:#fc4447;--a1:#74aef5;--a2:#4eccd3;--a3:#ee8dbd;--a4:#c2a7f4}
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:400 20px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:400 20px/1.5 'Schibsted Grotesk',ui-sans-serif,system-ui,sans-serif;overflow:hidden}
+.mono,code,.grid figcaption,.chip,nav,.nums b{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace!important}
 .slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;padding:6vh 7vw;gap:2.4vh}
 .slide.on{display:flex;animation:in .45s cubic-bezier(.16,1,.3,1)}
 @keyframes in{from{opacity:0;transform:translateY(12px)}}
@@ -28,6 +32,20 @@ p{margin:0;max-width:62ch;color:var(--muted)}
 .flow span{padding:10px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .flow i{color:var(--muted);font-style:normal}
 .nums{display:flex;gap:5vw;flex-wrap:wrap}.nums b{display:block;font:800 clamp(44px,5vw,80px)/1 ui-monospace,Menlo,monospace;color:var(--signal)}.nums span{color:var(--muted)}
+#bar{position:fixed;left:0;top:0;height:3px;background:var(--signal);transition:width .45s cubic-bezier(.16,1,.3,1);z-index:5}
+.swarm{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.swarm svg{position:absolute;width:30px;height:36px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+.swarm .tag{position:absolute;left:24px;top:28px;padding:1px 6px;border-radius:3px;font:700 11px 'JetBrains Mono',monospace;color:#0b1015;white-space:nowrap}
+.cur{position:absolute;animation:fly var(--d) cubic-bezier(.65,0,.35,1) infinite alternate;animation-delay:var(--dl)}
+@keyframes fly{0%{transform:translate(var(--x1),var(--y1))}45%{transform:translate(var(--x2),var(--y2))}100%{transform:translate(var(--x3),var(--y3))}}
+.title-wrap{position:relative;z-index:1}
+.grid figure{transition:transform .25s cubic-bezier(.16,1,.3,1),border-color .25s}
+.grid figure:hover{transform:scale(1.02);border-color:var(--muted)}
+.grid figure .who{position:absolute;right:8px;bottom:8px;padding:2px 8px;border-radius:4px;background:rgba(11,16,21,.85);color:var(--text);font:600 13px 'Schibsted Grotesk',sans-serif}
+.card{transition:border-color .2s}.card:hover{border-color:var(--muted)}
+.flow .arrow{width:34px;height:2px;background:var(--line);position:relative}.flow .arrow::after{content:'';position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--muted)}
+.result{display:flex;gap:28px;flex-wrap:wrap;margin-top:4px}.result b{font:700 34px 'JetBrains Mono',monospace}.result span{display:block;color:var(--muted);font-size:15px}
+@media (prefers-reduced-motion: reduce){.cur{animation:none}.slide.on{animation:none}}
 nav{position:fixed;right:24px;bottom:18px;color:var(--muted);font:14px ui-monospace,Menlo,monospace}
 code{font-family:ui-monospace,Menlo,monospace;background:var(--panel);padding:2px 8px;border-radius:5px;color:var(--text)}
 </style>
@@ -35,9 +53,12 @@ code{font-family:ui-monospace,Menlo,monospace;background:var(--panel);padding:2p
 <body>
 
 <section class="slide on">
+  <div class="swarm" aria-hidden="true"><div class="cur" style="--d:6.0s;--dl:-0.0s;--x1:46vw;--y1:27vh;--x2:55vw;--y2:14vh;--x3:14vw;--y3:76vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#74aef5" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#74aef5">A1 RAGE</span></div><div class="cur" style="--d:7.7s;--dl:-0.9s;--x1:17vw;--y1:54vh;--x2:79vw;--y2:15vh;--x3:69vw;--y3:35vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#4eccd3" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#4eccd3">A2 KEYS</span></div><div class="cur" style="--d:9.4s;--dl:-1.8s;--x1:9vw;--y1:19vh;--x2:60vw;--y2:61vh;--x3:13vw;--y3:38vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#ee8dbd" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#ee8dbd">A3 TOUCH</span></div><div class="cur" style="--d:6.0s;--dl:-2.7s;--x1:16vw;--y1:78vh;--x2:59vw;--y2:15vh;--x3:77vw;--y3:23vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#c2a7f4" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#c2a7f4">A4 SNOOP</span></div><div class="cur" style="--d:7.7s;--dl:-3.6s;--x1:33vw;--y1:82vh;--x2:12vw;--y2:81vh;--x3:79vw;--y3:58vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#d9c38c" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#d9c38c">A5 QUIT</span></div><div class="cur" style="--d:9.4s;--dl:-4.5s;--x1:11vw;--y1:36vh;--x2:10vw;--y2:79vh;--x3:22vw;--y3:45vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#8fd9a8" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#8fd9a8">A6 SLOW</span></div><div class="cur" style="--d:6.0s;--dl:-5.4s;--x1:58vw;--y1:26vh;--x2:74vw;--y2:23vh;--x3:78vw;--y3:47vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#f29b88" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#f29b88">A7 CRAWL</span></div><div class="cur" style="--d:7.7s;--dl:-6.3s;--x1:76vw;--y1:31vh;--x2:18vw;--y2:82vh;--x3:78vw;--y3:32vh"><svg viewBox="0 0 22 26"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="#a8b8c8" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tag" style="background:#a8b8c8">A8 RAGE</span></div></div>
+  <div class="title-wrap">
   <h1>Stampede</h1>
   <p class="big">Uygulamanıza aynı anda 8'e kadar sabırsız kullanıcı gönderen, kırılan her şeyi tekrar üretilebilir bir teste çeviren araç.</p>
   <p class="mono">Kaynak kod yok · API anahtarı şart değil · tamamen lokal</p>
+  </div>
 </section>
 
 <section class="slide">
@@ -60,28 +81,28 @@ code{font-family:ui-monospace,Menlo,monospace;background:var(--panel);padding:2p
 <section class="slide">
   <h2>Gerçek koşu · hatalı demo mağaza <span class="mono" style="font-size:.5em;color:var(--muted)">Kaos · 4 ajan · 22 sn</span></h2>
   <div class="grid">
-    <figure><video src="videos/demo/agent1.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a1)">A1</figcaption></figure>
-    <figure><video src="videos/demo/agent2.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a2)">A2</figcaption></figure>
-    <figure><video src="videos/demo/agent3.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a3)">A3</figcaption></figure>
-    <figure><video src="videos/demo/agent4.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a4)">A4</figcaption></figure>
+    <figure><video src="videos/demo/agent1.webm" preload="metadata" muted loop playsinline></video><span class="who">Masaüstü ajanı · 1280×800</span><figcaption style="background:#a8b8c8">MASAÜSTÜ</figcaption></figure>
+    <figure><video src="videos/demo/agent2.webm" preload="metadata" muted loop playsinline></video><span class="who">Masaüstü ajanı · 1280×800</span><figcaption style="background:#a8b8c8">MASAÜSTÜ</figcaption></figure>
+    <figure><video src="videos/demo/agent3.webm" preload="metadata" muted loop playsinline></video><span class="who">Masaüstü ajanı · 1280×800</span><figcaption style="background:#a8b8c8">MASAÜSTÜ</figcaption></figure>
+    <figure><video src="videos/demo/agent4.webm" preload="metadata" muted loop playsinline></video><span class="who">Mobil kullanıcı · 390×844</span><figcaption style="background:var(--a3)">MOBİL</figcaption></figure>
   </div>
-  <p>Bu koşu: 10 sorun, skor 15. Kritik çift ödeme, mobil taşma, üstü kapalı buton, UI donması…</p>
+  <div class="result"><div><b class="bad">10</b><span>sorun</span></div><div><b class="bad">15</b><span>dayanıklılık skoru</span></div><div><b>Kritik</b><span>çift ödeme, mobil taşma, üstü kapalı buton, UI donması</span></div></div>
 </section>
 
 <section class="slide">
   <h2>Gerçek koşu · biyom.co <span class="mono" style="font-size:.5em;color:var(--muted)">Güvenli mod · 4 ajan · 22 sn</span></h2>
   <div class="grid">
-    <figure><video src="videos/biyom/agent1.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a1)">A1</figcaption></figure>
-    <figure><video src="videos/biyom/agent2.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a2)">A2</figcaption></figure>
-    <figure><video src="videos/biyom/agent3.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a3)">A3</figcaption></figure>
-    <figure><video src="videos/biyom/agent4.webm" autoplay muted loop playsinline></video><figcaption style="background:var(--a4)">A4</figcaption></figure>
+    <figure><video src="videos/biyom/agent1.webm" preload="metadata" muted loop playsinline></video><span class="who">Masaüstü ajanı · 1280×800</span><figcaption style="background:#a8b8c8">MASAÜSTÜ</figcaption></figure>
+    <figure><video src="videos/biyom/agent2.webm" preload="metadata" muted loop playsinline></video><span class="who">Masaüstü ajanı · 1280×800</span><figcaption style="background:#a8b8c8">MASAÜSTÜ</figcaption></figure>
+    <figure><video src="videos/biyom/agent3.webm" preload="metadata" muted loop playsinline></video><span class="who">Mobil kullanıcı · 390×844</span><figcaption style="background:var(--a3)">MOBİL</figcaption></figure>
+    <figure><video src="videos/biyom/agent4.webm" preload="metadata" muted loop playsinline></video><span class="who">Masaüstü ajanı · 1280×800</span><figcaption style="background:#a8b8c8">MASAÜSTÜ</figcaption></figure>
   </div>
-  <p>Yazma istekleri ağda engellendi. Bulunan: yakalanmamış JS hatası (React #418) ve konsol hatası. Skor 83.</p>
+  <div class="result"><div><b class="sig">0</b><span>yazma isteği gitti</span></div><div><b>2</b><span>sorun: React #418 hidrasyon hatası, konsol hatası</span></div><div><b>83</b><span>dayanıklılık skoru</span></div></div>
 </section>
 
 <section class="slide">
   <h2>Nasıl karar veriyor?</h2>
-  <div class="flow"><span>Sayfayı keşfet</span><i>→</i><span>Bölgelere ayır<br><small class="mono">giriş · ödeme · arama · form</small></span><i>→</i><span>Riski sınıfla<br><small class="mono">ödeme · silme · OAuth</small></span><i>→</i><span>Ağırlıklı seçim<br><small class="mono">seed'li, tekrar oynatılır</small></span><i>→</i><span>Hamle + ölç</span></div>
+  <div class="flow"><span>Sayfayı keşfet</span><i class="arrow"></i><span>Bölgelere ayır<br><small class="mono">giriş · ödeme · arama · form</small></span><i class="arrow"></i><span>Riski sınıfla<br><small class="mono">ödeme · silme · OAuth</small></span><i class="arrow"></i><span>Ağırlıklı seçim<br><small class="mono">seed'li, tekrar oynatılır</small></span><i class="arrow"></i><span>Hamle + ölç</span></div>
   <p class="big">Karar grafiği her ajanın kararını canlı gösterir. İsteğe bağlı Gemini: tek çağrıda saldırı planı, görsel inceleme, kök neden özeti.</p>
 </section>
 
@@ -111,10 +132,11 @@ code{font-family:ui-monospace,Menlo,monospace;background:var(--panel);padding:2p
   <p class="mono">npm start · github.com/Wyclaew/Stampede</p>
 </section>
 
+<div id="bar"></div>
 <nav id="nav"></nav>
 <script>
 const slides=[...document.querySelectorAll('.slide')];let i=0;
-const show=n=>{slides[i].classList.remove('on');i=Math.max(0,Math.min(slides.length-1,n));slides[i].classList.add('on');document.getElementById('nav').textContent=(i+1)+' / '+slides.length+'  ← →';};
+const show=n=>{slides[i].classList.remove('on');i=Math.max(0,Math.min(slides.length-1,n));slides[i].classList.add('on');document.getElementById('nav').textContent=(i+1)+' / '+slides.length;document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';document.querySelectorAll('video').forEach(v=>{if(slides[i].contains(v)){v.currentTime=0;v.play().catch(()=>{})}else v.pause()});};
 document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))show(i+1);if(['ArrowLeft','PageUp'].includes(e.key))show(i-1);if(e.key==='f')document.documentElement.requestFullscreen();});
 document.addEventListener('click',e=>show(e.clientX>innerWidth/3?i+1:i-1));show(0);
 </script>
