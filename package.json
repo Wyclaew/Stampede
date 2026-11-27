@@ -1,0 +1,26 @@
+{
+  "name": "rageghost",
+  "version": "1.0.0",
+  "description": "RageGhost - the Impatient Ghost User. A local-first chaos tester that attacks any web app like the most impatient human and turns real bugs into reproducible reports and Playwright regression tests.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "rageghost": "bin/rageghost.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node scripts/start.js",
+    "dashboard": "node src/server/index.js",
+    "demo": "node demo/server.js",
+    "ghost": "node bin/rageghost.js",
+    "test": "node --test test/unit/",
+    "test:e2e": "node --test --test-concurrency=1 test/e2e/",
+    "test:all": "npm test && npm run test:e2e",
+    "postinstall": "node scripts/ensure-browser.js"
+  },
+  "dependencies": {
+    "playwright": "1.65.1"
+  }
+}
