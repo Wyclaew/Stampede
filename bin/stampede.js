@@ -12,6 +12,8 @@ import { DEFAULT_SWARM, PERSONA_ORDER } from '../src/engine/personas.js';
 import { loadEnv } from '../src/util/env.js';
 
 const C = { red: '\x1b[31m', yellow: '\x1b[33m', blue: '\x1b[36m', magenta: '\x1b[35m', dim: '\x1b[2m', bold: '\x1b[1m', reset: '\x1b[0m', orange: '\x1b[38;5;208m' };
+// Page-controlled text must not inject terminal escape sequences.
+const safeText = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
 const SEV_COLOR = { critical: C.red, high: C.orange, medium: C.yellow, low: C.blue };
 
 const HELP = `
@@ -83,7 +85,7 @@ async function main() {
   session.on('issue', ({ issue, isNew }) => {
     if (!isNew) return;
     const col = SEV_COLOR[issue.severity];
-    process.stdout.write(`  ${col}■ ${SEVERITY_LABEL[issue.severity].padEnd(6)}${C.reset} ${C.dim}${issue.agentCode || ''}${C.reset} ${C.bold}${issue.title}${C.reset} ${C.dim}— ${issue.detail.slice(0, 110)}${C.reset}\n`);
+    process.stdout.write(`  ${col}■ ${SEVERITY_LABEL[issue.severity].padEnd(6)}${C.reset} ${C.dim}${issue.agentCode || ''}${C.reset} ${C.bold}${issue.title}${C.reset} ${C.dim}— ${safeText(issue.detail).slice(0, 110)}${C.reset}\n`);
   });
   session.on('action', (a) => {
     if (a.phase === 'done' && a.seq % 10 === 0) process.stdout.write(`  ${C.dim}… ${a.seq} aksiyon${C.reset}\n`);

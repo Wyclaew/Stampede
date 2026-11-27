@@ -4,7 +4,8 @@ const js = (v) => JSON.stringify(v);
 
 function stepCode(step) {
   const loc = step.locator;
-  const c = `  // ${step.label}`;
+  // Labels contain page text: never let a line break end the comment and inject code into the spec.
+  const c = `  // ${String(step.label || step.kind).replace(/[\r\n\u2028\u2029]+/g, ' ')}`;
   switch (step.kind) {
     case 'rageClick': {
       const lines = [c];
