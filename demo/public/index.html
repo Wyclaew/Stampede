@@ -4,17 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fincan · Nitelikli Kahve</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%232b1d14'/><path d='M10 13h10v5a5 5 0 0 1-10 0z' fill='%23d9a066'/></svg>">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="promo"><div class="promo-track">☕ Bugün tüm siparişlerde kargo bedava · FINCAN10 koduyla %10 indirim · Yeni hasat Etiyopya stokta · Aynı gün kavrum, ertesi gün kapında</div></div>
+  <div class="promo"><div class="promo-track">Bugün tüm siparişlerde kargo bedava · FINCAN10 koduyla %10 indirim · Yeni hasat Etiyopya stokta · Aynı gün kavrum, ertesi gün kapında</div></div>
   <header class="site-head">
     <a href="#/" class="logo" data-link>Fin<span>can</span></a>
     <nav aria-label="Ana menü">
       <a href="#/" data-link>Mağaza</a>
       <a href="#/checkout" data-link>Sepet <span class="badge" id="cartBadge">…</span></a>
       <a href="#/orders" data-link>Kasa defteri</a>
+      <a href="#/account" data-link>Hesabım</a>
     </nav>
     <span class="loader" id="globalLoader" hidden aria-label="Yükleniyor"></span>
     <span class="build" id="buildTag"></span>
@@ -22,21 +23,20 @@
 
   <main id="view"></main>
 
-  <button class="chat" id="chat" type="button">💬 <span>Yardım lazım mı?</span></button>
+  <button class="chat" id="chat" type="button"><span class="chat-dot" aria-hidden="true"></span>Canlı destek</button>
   <div class="toast" id="toast" role="status" hidden></div>
 
   <template id="tpl-shop">
     <section class="hero">
       <div>
-        <p class="eyebrow">Yeni hasat · 2026</p>
         <h1>Sabahın ilk yudumu,<br><em>özenle kavruldu.</em></h1>
         <p class="lede">Küçük çiftliklerden nitelikli çekirdekler. Siparişin 24 saat içinde kapında.</p>
-        <a class="cta" href="#/checkout" data-link>Ödemeye geç →</a>
+        <a class="cta" href="#/checkout" data-link>Ödemeye geç</a>
       </div>
-      <div class="hero-art" aria-hidden="true">☕</div>
+      <svg class="hero-art" viewBox="0 0 200 160" aria-hidden="true"><ellipse cx="96" cy="140" rx="78" ry="10" fill="#e3cfb2"/><path d="M38 56h116v38a58 46 0 0 1-116 0z" fill="#2b1d14"/><path d="M154 66h10a18 18 0 0 1 0 36h-14" fill="none" stroke="#2b1d14" stroke-width="10"/><ellipse cx="96" cy="56" rx="58" ry="11" fill="#6b4226"/><path d="M78 36c-6-8 6-14 0-24M100 38c-6-8 6-14 0-24M122 36c-6-8 6-14 0-24" fill="none" stroke="#c9a77f" stroke-width="4" stroke-linecap="round"/></svg>
     </section>
     <section class="toolbar">
-      <label class="search"><span>🔎</span><input id="search" type="search" placeholder="Kahve ara…" autocomplete="off"></label>
+      <label class="search"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><input id="search" type="search" placeholder="Kahve ara" autocomplete="off"></label>
       <select id="sort" aria-label="Sırala">
         <option value="featured">Önerilen</option>
         <option value="asc">Fiyat (artan)</option>
@@ -79,7 +79,7 @@
         </dl>
         <div class="paybar">
           <button id="pay" type="button" class="pay">Öde</button>
-          <p class="secure">🔒 256-bit güvenli ödeme</p>
+          <p class="secure">256-bit güvenli ödeme</p>
         </div>
       </aside>
     </section>
@@ -92,6 +92,27 @@
       <div class="ledger-total"><span>Toplam tahsil edilen</span><b id="charged">₺0</b></div>
       <ol class="ledger" id="ledger"></ol>
       <button type="button" class="danger" id="wipe">Tüm demo verilerini sil</button>
+    </section>
+  </template>
+
+  <template id="tpl-account">
+    <section class="account">
+      <div class="auth-card">
+        <h1>Hesabım</h1>
+        <p class="lede">Siparişlerini takip etmek için giriş yap ya da hesap oluştur.</p>
+        <button type="button" class="oauth" id="oauth">Google ile devam et</button>
+        <div class="or"><span>veya e-posta ile</span></div>
+        <form id="authForm" novalidate>
+          <label>E-posta<input id="email" name="email" type="email" autocomplete="email" required></label>
+          <label>Şifre<input id="password" name="password" type="password" autocomplete="current-password" required minlength="6"></label>
+          <div class="auth-actions">
+            <button type="submit" class="pay" id="loginBtn" data-intent="login">Giriş yap</button>
+            <button type="button" class="ghost-btn" id="signupBtn" data-intent="signup">Hesap oluştur</button>
+          </div>
+          <p class="auth-msg" id="authMsg" role="status"></p>
+        </form>
+        <p class="muted small">Kayıtlı kullanıcı: <b id="userCount">0</b></p>
+      </div>
     </section>
   </template>
 

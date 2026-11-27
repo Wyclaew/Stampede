@@ -6,7 +6,7 @@ import { SEVERITY_LABEL } from '../engine/issues.js';
 
 export function renderMarkdown(report) {
   const lines = [
-    `# 👻 RageGhost Raporu`,
+    `# Stampede raporu`,
     ``,
     `- **Hedef:** ${report.target}`,
     `- **Mod:** ${report.mode.label} · **Seed:** ${report.seed} · **Süre:** ${(report.durationMs / 1000).toFixed(0)} sn`,
@@ -35,7 +35,7 @@ export function reportDirName(report) {
   return `${stamp}_${host}_${report.mode.id}`;
 }
 
-/** Write report.html, report.json, report.md and rageghost.spec.js. */
+/** Write report.html, report.json, report.md and stampede.spec.ts. */
 export async function writeReport(report, baseDir) {
   const name = reportDirName(report);
   const dir = join(baseDir, name);
@@ -44,7 +44,7 @@ export async function writeReport(report, baseDir) {
     html: join(dir, 'report.html'),
     json: join(dir, 'report.json'),
     md: join(dir, 'report.md'),
-    spec: join(dir, 'rageghost.spec.js'),
+    spec: join(dir, 'stampede.spec.ts'),
   };
   await Promise.all([
     writeFile(files.html, renderHtml(report)),

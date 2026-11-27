@@ -27,8 +27,11 @@ const TEL = ['+90 (555) 000 00 00', 'abc', '0'.repeat(30), '-1', ''];
 const DATE = ['0000-01-01', '9999-12-31', '2024-02-30', ''];
 const URL_IN = ['javascript:alert(1)', 'http://', 'ftp://x', 'not a url', ''];
 
-export function pickChaosInput(field, rng) {
+const HOSTILE = [XSS_PAYLOAD, "' OR '1'='1' --", '../../../../etc/passwd', '${7*7}', 'A'.repeat(5000), '<svg><title>x</title></svg>', '"; DROP TABLE users; --'];
+
+export function pickChaosInput(field, rng, { hostile = false } = {}) {
   const type = (field.type || 'text').toLowerCase();
+  if (hostile && !['number', 'date', 'datetime-local', 'month'].includes(type)) return rng.pick(HOSTILE);
   let pool = TEXT;
   if (type === 'number' || field.inputMode === 'numeric') pool = NUMBER;
   else if (type === 'email') pool = EMAIL;

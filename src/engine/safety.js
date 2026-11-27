@@ -98,6 +98,10 @@ export function classifyElement(el, origin) {
   const type = el.type || '';
 
   if (tag === 'input' && type === 'file') return { category: 'skip', isCTA: false, reason: 'file input' };
+  // Third-party sign-in (Google, Apple, GitHub ...) is never touched in any mode.
+  if (!el.editable && (OAUTH_TEXT.test(text) || OAUTH_HOST.test(el.absHref || el.href || ''))) {
+    return { category: 'oauth', isCTA: false, reason: 'third-party sign-in' };
+  }
 
   if (el.editable || tag === 'select') {
     const sensitive =
@@ -129,10 +133,35 @@ export function classifyElement(el, origin) {
   return { category: 'neutral', isCTA: false, reason: 'plain control' };
 }
 
+const OAUTH_TEXT = /(google|apple|github|gitlab|facebook|microsoft|linkedin|twitter|discord|\bsso\b|single sign|continue with|sign in with|log in with|login with|ile giriş|ile devam|ile oturum|ile kaydol)/i;
+const OAUTH_HOST = /(accounts\.google\.|appleid\.apple\.|github\.com\/login|login\.microsoftonline\.|facebook\.com\/(v\d+\.\d+\/)?dialog|auth0\.com|okta\.com|\/oauth|\/sso\b)/i;
+
+const ZONE_RULES = [
+  ['auth', /(login|log in|sign in|sign up|signup|register|password|şifre|parola|giriş|kayıt|kaydol|üye ol|hesap|account|e-?posta|email)/i],
+  ['checkout', /(pay|checkout|purchase|buy|order|cart|basket|coupon|öde|satın|sipariş|sepet|kupon|kasa|fatura)/i],
+  ['search', /(search|ara\b|arama|bul|query|filtre|filter|sort|sırala)/i],
+];
+
+/** Which part of the page an element belongs to — the ghost's "attack map". */
+export function zoneOf(el, cls) {
+  const text = `${el.text || ''} ${el.ariaLabel || ''} ${el.placeholder || ''} ${el.name || ''} ${el.elId || ''} ${el.type || ''}`;
+  if (cls && cls.category === 'oauth') return 'auth';
+  if (el.type === 'password' || el.type === 'email') return 'auth';
+  if (el.type === 'search') return 'search';
+  for (const [zone, rx] of ZONE_RULES) if (rx.test(text)) return zone;
+  if (el.tag === 'select' || el.type === 'checkbox' || el.type === 'radio') return 'search';
+  if (el.tag === 'a') return 'nav';
+  if (el.editable || el.inForm) return 'form';
+  return 'content';
+}
+
+export const ZONE_LABEL = Object.freeze({ auth: 'Giriş / Kayıt', checkout: 'Sepet / Ödeme', search: 'Arama / Filtre', form: 'Form', nav: 'Navigasyon', content: 'İçerik', page: 'Tüm sayfa' });
+
 export function isAllowed(category, mode) {
   switch (category) {
     case 'skip':
     case 'external':
+    case 'oauth':
       return false;
     case 'destructive':
       return mode.allowDestructive;

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One command for the demo: starts the buggy demo store + the RageGhost dashboard and opens the browser.
+// One command for the demo: starts the buggy demo store + the Stampede dashboard and opens the browser.
 import { spawn } from 'node:child_process';
 import { startDemo } from '../demo/server.js';
 import { startDashboard } from '../src/server/index.js';
@@ -19,7 +19,7 @@ async function main() {
   const dash = await startDashboard({ demoUrl: demo.url });
   const out = [
     '',
-    '  👻  RageGhost hazır',
+    '  👻  Stampede hazır',
     '',
     `  Dashboard      ${dash.url}`,
     `  Demo (hatalı)  ${demo.url}`,

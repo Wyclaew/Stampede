@@ -21,17 +21,27 @@ async function say(page, text, kind) {
   await quiet(page.evaluate(ghostSay, { text, kind }));
 }
 
-async function glideTo(ctx, x, y) {
+export async function glideTo(ctx, x, y) {
+  if (ctx.persona && ctx.persona.touch) return; // fingers do not hover
   await ctx.page.mouse.move(x, y, { steps: ctx.rng.int(6, 12) });
 }
 
-async function pointFor(ctx, el) {
+export async function pointFor(ctx, el) {
   const pt = await quiet(ctx.page.evaluate(findClickablePoint, el.id));
-  if (!pt) return null;
-  return pt;
+  ctx.lastPoint = pt ? { x: pt.x, y: pt.y } : null;
+  return pt || null;
 }
 
-function baseStep(ctx, kind, el) {
+export async function press(ctx, x, y) {
+  if (ctx.persona && ctx.persona.touch) {
+    await quiet(ctx.page.touchscreen.tap(x, y));
+  } else {
+    await quiet(ctx.page.mouse.click(x, y));
+  }
+  ctx.counters.clicks++;
+}
+
+export function baseStep(ctx, kind, el) {
   return {
     kind,
     urlBefore: ctx.page.url(),
@@ -39,57 +49,91 @@ function baseStep(ctx, kind, el) {
     target: el ? humanName(el) : null,
     locator: el ? playwrightLocator(el) : null,
     elId: el ? el.id : null,
+    touch: Boolean(ctx.persona && ctx.persona.touch),
   };
 }
 
-export async function rageClick(ctx, cand) {
-  const { page, rng, mode } = ctx;
-  const el = cand.el;
-  const pt = await pointFor(ctx, el);
-  if (!pt) return null;
-  const count = cand.cls && cand.cls.category === 'toggle' ? 3 : rng.int(mode.burst[0], mode.burst[1]);
-  await glideTo(ctx, pt.x, pt.y);
-  const label = count === 2 ? 'ÇİFT TIK!' : count === 3 ? 'ÜÇLÜ TIK!' : `ÖFKE TIKI ×${count}`;
-  await say(page, `${label} ${el.text ? `“${el.text.slice(0, 24)}”` : ''}`);
-  const before = await quiet(page.evaluate(readCounters));
-  const reqBefore = ctx.counters.requests;
-  for (let i = 0; i < count; i++) {
-    await quiet(page.mouse.click(pt.x, pt.y));
-    ctx.counters.clicks++;
-    await sleep(rng.int(25, 85));
-  }
-  await sleep(650);
-  const after = await quiet(page.evaluate(readCounters));
-  const step = { ...baseStep(ctx, 'rageClick', el), count, label: `${humanName(el)} ${count} kez hızlıca tıkla` };
-  const reacted =
+export async function didReact(ctx, before, reqBefore) {
+  const after = await quiet(ctx.page.evaluate(readCounters));
+  return (
     !before ||
     !after ||
     after.mutations !== before.mutations ||
     after.url !== before.url ||
     after.scroll !== before.scroll ||
-    ctx.counters.requests !== reqBefore;
+    ctx.counters.requests !== reqBefore
+  );
+}
+
+export async function rageClick(ctx, cand) {
+  const { page, rng, mode, persona } = ctx;
+  const el = cand.el;
+  // Layout breaker: right before hitting a money button, the window snaps to phone width.
+  const squeeze = persona && persona.id === 'rage' && cand.money && rng.chance(0.25);
+  const original = page.viewportSize();
+  if (squeeze) {
+    await say(page, 'EKRAN 375px');
+    await quiet(page.setViewportSize({ width: 375, height: 667 }));
+    await sleep(250);
+    await ctx.probe('tıklamadan önce 375px');
+  }
+  const pt = await pointFor(ctx, el);
+  if (!pt) return null;
+  const count = cand.cls && cand.cls.category === 'toggle' ? 3 : rng.int(mode.burst[0], mode.burst[1]);
+  await glideTo(ctx, pt.x, pt.y);
+  const verb = persona && persona.touch ? 'DOKUNUŞ' : 'TIK';
+  await say(page, `${verb} ×${count}${el.text ? `  ${el.text.slice(0, 26)}` : ''}`);
+  const before = await quiet(page.evaluate(readCounters));
+  const reqBefore = ctx.counters.requests;
+  for (let i = 0; i < count; i++) {
+    await press(ctx, pt.x, pt.y);
+    await sleep(rng.int(25, 85));
+  }
+  await sleep(650);
+  const reacted = await didReact(ctx, before, reqBefore);
+  const sizes = squeeze ? [{ width: 375, height: 667 }] : null;
+  if (squeeze && original) await quiet(page.setViewportSize(original));
+  const step = {
+    ...baseStep(ctx, 'rageClick', el),
+    count,
+    squeezeTo: sizes,
+    label: `${squeeze ? 'Ekranı 375px’e daraltıp ' : ''}${humanName(el)} ${count} kez hızlıca ${persona && persona.touch ? 'dokun' : 'tıkla'}`,
+  };
   const isButtonish = el.tag === 'button' || el.role === 'button' || (el.tag === 'input' && ['button', 'submit'].includes(el.type));
   if (!reacted && isButtonish && !pt.blocked) step.dead = true;
   return step;
 }
 
-export async function chaosType(ctx, cand) {
-  const { page, rng, mode } = ctx;
-  const el = cand.el;
-  const pt = await pointFor(ctx, el);
-  if (!pt) return null;
-  await glideTo(ctx, pt.x, pt.y);
-  await quiet(page.mouse.click(pt.x, pt.y));
-  const value = pickChaosInput(el, rng);
-  await say(page, `⌨ ${describeInput(value).slice(0, 30)}`);
-  await quiet(
-    page.evaluate((id) => {
+export async function focusEl(ctx, el) {
+  return quiet(
+    ctx.page.evaluate((id) => {
       const n = document.querySelector(`[data-rg-id="${id}"]`);
-      if (n && typeof n.select === 'function') n.select();
+      if (!n) return false;
+      n.focus();
+      if (typeof n.select === 'function') n.select();
+      return true;
     }, el.id),
   );
+}
+
+export async function chaosType(ctx, cand) {
+  const { page, rng, mode, persona } = ctx;
+  const el = cand.el;
+  if (persona && persona.keyboardOnly) {
+    if (!(await focusEl(ctx, el))) return null;
+  } else {
+    const pt = await pointFor(ctx, el);
+    if (!pt) return null;
+    await glideTo(ctx, pt.x, pt.y);
+    await press(ctx, pt.x, pt.y);
+    await focusEl(ctx, el);
+  }
+  const value = pickChaosInput(el, rng, { hostile: Boolean(persona && persona.hostileInputs) });
+  await say(page, `YAZ  ${describeInput(value).slice(0, 30)}`);
   await quiet(page.keyboard.press('Backspace'));
-  if (value) await quiet(page.keyboard.type(value, { delay: mode.typeDelayMs }));
+  // Very long values are pasted (as a real user would), not typed key by key.
+  if (value.length > 200) await quiet(page.keyboard.insertText(value));
+  else if (value) await quiet(page.keyboard.type(value, { delay: mode.typeDelayMs }));
   ctx.counters.keystrokes += value.length + 1;
   const step = { ...baseStep(ctx, 'type', el), value, label: `${humanName(el)} içine ${describeInput(value)} yaz` };
   if (mode.allowMutations && rng.chance(0.5)) {
@@ -111,7 +155,7 @@ export async function pickOption(ctx, cand) {
   const pt = await pointFor(ctx, el);
   if (!pt) return null;
   await glideTo(ctx, pt.x, pt.y);
-  await say(page, '🔀 SEÇENEK KARIŞTIR');
+  await say(page, 'SEÇİM ×3');
   const indexes = [];
   const loc = page.locator(`[data-rg-id="${el.id}"]`);
   for (let i = 0; i < 3; i++) {
@@ -130,10 +174,9 @@ export async function navigate(ctx, cand) {
   const pt = await pointFor(ctx, el);
   if (!pt) return null;
   await glideTo(ctx, pt.x, pt.y);
-  await say(page, `🔗 ${el.text ? el.text.slice(0, 26) : 'link'}`);
+  await say(page, `GİT  ${el.text ? el.text.slice(0, 26) : 'link'}`);
   const step = { ...baseStep(ctx, 'navigate', el), label: `${humanName(el)} tıkla` };
-  await quiet(page.mouse.click(pt.x, pt.y));
-  ctx.counters.clicks++;
+  await press(ctx, pt.x, pt.y);
   await quiet(page.waitForLoadState('domcontentloaded', { timeout: 4000 }));
   await sleep(350);
   return step;
@@ -143,7 +186,7 @@ export async function backForward(ctx) {
   const { page, rng } = ctx;
   const n = rng.int(3, 6);
   const sequence = [];
-  await say(page, `⏪⏩ GERİ/İLERİ ×${n}`);
+  await say(page, `GERİ/İLERİ ×${n}`);
   const step = { ...baseStep(ctx, 'backForward', null) };
   for (let i = 0; i < n; i++) {
     const dir = i % 2 === 0 ? 'back' : 'forward';
@@ -165,7 +208,7 @@ export async function viewportShake(ctx) {
   const step = baseStep(ctx, 'viewport', null);
   const count = rng.int(4, 6);
   const sizes = [];
-  await say(page, '📱↔🖥 EKRAN SARSINTISI');
+  await say(page, 'EKRAN SARSINTISI');
   for (let i = 0; i < count; i++) {
     const vp = i === 0 ? VIEWPORTS[0] : rng.pick(VIEWPORTS);
     sizes.push({ width: vp.width, height: vp.height });
@@ -183,7 +226,7 @@ export async function viewportShake(ctx) {
 export async function scrollFrenzy(ctx) {
   const { page, rng } = ctx;
   const deltas = [];
-  await say(page, '🌀 SCROLL ÇILGINLIĞI');
+  await say(page, 'HIZLI KAYDIRMA');
   await quiet(page.mouse.move(rng.int(60, 300), rng.int(120, 400), { steps: 4 }));
   for (let i = 0; i < 5; i++) {
     const dy = (rng.chance(0.65) ? 1 : -1) * rng.int(300, 1500);
@@ -199,7 +242,7 @@ export async function keyMash(ctx) {
   const { page, rng, mode } = ctx;
   const pool = mode.allowMutations ? ['Tab', 'Tab', 'Enter', 'Escape', 'Space', 'ArrowDown', 'Shift+Tab'] : ['Tab', 'Tab', 'Escape', 'ArrowDown', 'Shift+Tab'];
   const keys = Array.from({ length: rng.int(4, 7) }, () => rng.pick(pool));
-  await say(page, '⌨ KLAVYE EZME');
+  await say(page, 'KLAVYE ×7');
   for (const k of keys) {
     await quiet(page.keyboard.press(k));
     await sleep(rng.int(30, 90));
@@ -211,7 +254,7 @@ export async function keyMash(ctx) {
 
 export async function reloadSpam(ctx) {
   const { page } = ctx;
-  await say(page, '🔄 F5 F5!');
+  await say(page, 'F5 ×2');
   const step = baseStep(ctx, 'reload', null);
   await quiet(page.reload({ waitUntil: 'commit', timeout: 3000 }));
   await sleep(120);
@@ -222,26 +265,13 @@ export async function reloadSpam(ctx) {
 
 export async function offlineFlap(ctx) {
   const { page, context, rng } = ctx;
-  await say(page, '📡 WI-FI KOPTU!');
+  await say(page, 'BAĞLANTI KOPTU');
   const step = baseStep(ctx, 'offline', null);
   await quiet(context.setOffline(true));
   const pt = { x: rng.int(80, 400), y: rng.int(120, 500) };
-  await quiet(page.mouse.click(pt.x, pt.y));
+  await press(ctx, pt.x, pt.y);
   await sleep(1300);
   await quiet(context.setOffline(false));
   await sleep(400);
   return { ...step, label: 'İnternet bağlantısını 1.3 saniyeliğine kes (offline) ve tıkla' };
 }
-
-export const ACTIONS = {
-  rageClick,
-  type: chaosType,
-  select: pickOption,
-  navigate,
-  backForward,
-  viewport: viewportShake,
-  scroll: scrollFrenzy,
-  keys: keyMash,
-  reload: reloadSpam,
-  offline: offlineFlap,
-};

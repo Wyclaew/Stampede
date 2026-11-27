@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// RageGhost CLI — headless runs for terminals and CI.
-//   rageghost run <url> [--mode safe|chaos|stress] [--duration 60] [--seed N] [--headed] [--yes-live] [--out dir] [--fail-on high]
+// Stampede CLI — headless runs for terminals and CI.
+//   stampede run <url> [--mode safe|chaos|stress] [--duration 60] [--seed N] [--headed] [--yes-live] [--out dir] [--fail-on high]
 import { resolve } from 'node:path';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { GhostSession } from '../src/engine/session.js';
+import { StampedeSession } from '../src/engine/session.js';
 import { SEVERITY_ORDER, SEVERITY_LABEL } from '../src/engine/issues.js';
 import { writeReport } from '../src/report/index.js';
 import { REPORTS_DIR } from '../src/server/index.js';
@@ -13,10 +13,10 @@ const C = { red: '\x1b[31m', yellow: '\x1b[33m', blue: '\x1b[36m', magenta: '\x1
 const SEV_COLOR = { critical: C.red, high: C.orange, medium: C.yellow, low: C.blue };
 
 const HELP = `
-👻 RageGhost — Sabırsız Hayalet Kullanıcı
+👻 Stampede — Sabırsız Hayalet Kullanıcı
 
 Kullanım:
-  rageghost run <url> [seçenekler]
+  stampede run <url> [seçenekler]
 
 Seçenekler:
   --mode <safe|chaos|stress>  Varsayılan: safe (canlı siteler için güvenli)
@@ -28,8 +28,8 @@ Seçenekler:
   --fail-on <seviye>          Bu seviyede sorun bulunursa çıkış kodu 1 (CI için): critical|high|medium|low
 
 Örnekler:
-  rageghost run http://localhost:7500 --mode chaos --duration 30
-  rageghost run https://biyom.co --mode safe --duration 90
+  stampede run http://localhost:7500 --mode chaos --duration 30
+  stampede run https://biyom.co --mode safe --duration 90
 `;
 
 export function parseArgs(argv) {
@@ -62,8 +62,8 @@ async function main() {
     process.exit(argv.length && argv[0] !== '--help' && argv[0] !== '-h' ? 2 : 0);
   }
   const opts = parseArgs(argv);
-  const session = new GhostSession({ url: opts.url, mode: opts.mode, durationSec: opts.durationSec, seed: opts.seed, headed: opts.headed, confirmLive: opts.confirmLive });
-  process.stdout.write(`\n👻 ${C.bold}RageGhost${C.reset} → ${opts.url}  ${C.dim}(${session.mode.label}, ${session.config.durationSec} sn, seed ${session.config.seed})${C.reset}\n\n`);
+  const session = new StampedeSession({ url: opts.url, mode: opts.mode, durationSec: opts.durationSec, seed: opts.seed, headed: opts.headed, confirmLive: opts.confirmLive });
+  process.stdout.write(`\n👻 ${C.bold}Stampede${C.reset} → ${opts.url}  ${C.dim}(${session.mode.label}, ${session.config.durationSec} sn, seed ${session.config.seed})${C.reset}\n\n`);
   process.on('SIGINT', () => session.stop());
   session.on('issue', ({ issue, isNew }) => {
     if (!isNew) return;

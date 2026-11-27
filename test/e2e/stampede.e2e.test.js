@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDemoServer } from '../../demo/server.js';
 import { createDashboardServer } from '../../src/server/index.js';
-import { GhostSession } from '../../src/engine/session.js';
+import { StampedeSession } from '../../src/engine/session.js';
 import { writeReport } from '../../src/report/index.js';
 import { listenWithFallback } from '../../src/util/listen.js';
 
@@ -18,7 +18,7 @@ before(async () => {
   demo = createDemoServer();
   const port = await listenWithFallback(demo.server, 0);
   demoUrl = `http://localhost:${port}`;
-  outDir = await mkdtemp(join(tmpdir(), 'rageghost-e2e-'));
+  outDir = await mkdtemp(join(tmpdir(), 'stampede-e2e-'));
 });
 
 after(async () => {
@@ -31,7 +31,7 @@ const types = (report) => new Set(report.issues.map((i) => i.type));
 
 test('chaos mode catches the deliberate bugs in the buggy demo', { timeout: 120000 }, async () => {
   await resetDemo();
-  const report = await new GhostSession({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 40, seed: 7 }).run();
+  const report = await new StampedeSession({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 40, seed: 7 }).run();
   const found = types(report);
   const doubleCharge = report.issues.find((i) => i.type === 'double-submit' && i.request.url.endsWith('/api/orders'));
   assert.ok(doubleCharge, `double charge not found; got: ${[...found].join(', ')}`);
@@ -53,7 +53,7 @@ test('chaos mode catches the deliberate bugs in the buggy demo', { timeout: 1200
 test('safe mode never lets a mutation reach the server', { timeout: 90000 }, async () => {
   await resetDemo();
   const before = demo.state.mutationCount;
-  const report = await new GhostSession({ url: `${demoUrl}/`, mode: 'safe', durationSec: 20, seed: 3 }).run();
+  const report = await new StampedeSession({ url: `${demoUrl}/`, mode: 'safe', durationSec: 20, seed: 3 }).run();
   assert.equal(demo.state.mutationCount, before, 'server received a POST/PUT/DELETE in safe mode');
   assert.equal(demo.state.orders.length, 0);
   assert.ok(report.stats.actions > 5);
@@ -64,14 +64,14 @@ test('safe mode never lets a mutation reach the server', { timeout: 90000 }, asy
 
 test('fixed build survives the same chaos', { timeout: 120000 }, async () => {
   await resetDemo();
-  const report = await new GhostSession({ url: `${demoUrl}/?fixed=1`, mode: 'chaos', durationSec: 30, seed: 7 }).run();
+  const report = await new StampedeSession({ url: `${demoUrl}/?fixed=1`, mode: 'chaos', durationSec: 30, seed: 7 }).run();
   const serious = report.issues.filter((i) => i.severity === 'critical' || i.severity === 'high');
   assert.deepEqual(serious.map((i) => `${i.type}: ${i.detail}`), []);
   assert.ok(report.score >= 85, `score ${report.score}`);
 });
 
 test('dashboard API streams a full run over SSE and serves the report', { timeout: 90000 }, async () => {
-  process.env.RAGEGHOST_REPORTS = outDir;
+  process.env.STAMPEDE_REPORTS = outDir;
   const { server } = createDashboardServer({ demoUrl });
   const port = await listenWithFallback(server, 0);
   const base = `http://localhost:${port}`;
@@ -114,7 +114,7 @@ test('dashboard API streams a full run over SSE and serves the report', { timeou
     assert.ok(done && done.reportName);
     const page = await fetch(`${base}/reports/${encodeURIComponent(done.reportName)}/report.html`);
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /RageGhost Raporu/);
+    assert.match(await page.text(), /Stampede Raporu/);
     const traversal = await fetch(`${base}/reports/..%2F..%2Fpackage.json`);
     assert.notEqual(traversal.status, 200);
   } finally {

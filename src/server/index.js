@@ -1,21 +1,30 @@
-// RageGhost dashboard server: static UI + JSON API + Server-Sent Events live stream.
+// Stampede dashboard server: static UI + JSON API + Server-Sent Events live stream.
 import http from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { GhostSession, stripHeavy } from '../engine/session.js';
-import { MODES, isLocalUrl } from '../engine/safety.js';
+import { StampedeSession, stripHeavy } from '../engine/session.js';
+import { MODES, isLocalUrl, ZONE_LABEL } from '../engine/safety.js';
+import { PERSONAS, PERSONA_ORDER } from '../engine/personas.js';
+import { MOVE_LABEL } from '../engine/moves.js';
+import { CATEGORIES } from '../engine/issues.js';
 import { writeReport } from '../report/index.js';
 import { listenWithFallback } from '../util/listen.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..', '..');
 const PUBLIC_DIR = join(ROOT, 'public');
-export const REPORTS_DIR = process.env.RAGEGHOST_REPORTS || join(ROOT, 'reports');
+export const REPORTS_DIR = join(ROOT, 'reports');
+const reportsDir = () => process.env.STAMPEDE_REPORTS || REPORTS_DIR;
+const FONT_DIRS = {
+  'schibsted-grotesk': join(ROOT, 'node_modules', '@fontsource-variable', 'schibsted-grotesk', 'files'),
+  'jetbrains-mono': join(ROOT, 'node_modules', '@fontsource-variable', 'jetbrains-mono', 'files'),
+};
+const EMAIL_RX = /^[^\s@]{1,64}@[^\s@]{1,190}$/;
 const MAX_BODY = 64 * 1024;
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ts': 'text/plain; charset=utf-8' };
 
 function send(res, status, payload) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -51,8 +60,17 @@ export function parseRunRequest(body) {
   if (!Number.isFinite(durationSec) || durationSec < 5 || durationSec > 900) errors.push('durationSec 5-900 arası olmalı');
   const seed = body.seed === undefined || body.seed === '' || body.seed === null ? undefined : Number(body.seed);
   if (seed !== undefined && !Number.isInteger(seed)) errors.push('seed tam sayı olmalı');
+  const personas = body.personas === undefined ? ['rage'] : body.personas;
+  if (!Array.isArray(personas) || !personas.length || personas.some((p) => !PERSONA_ORDER.includes(p))) errors.push(`personas şunlardan en az biri olmalı: ${PERSONA_ORDER.join(', ')}`);
+  let credentials;
+  if (body.credentials && (body.credentials.email || body.credentials.password)) {
+    const { email = '', password = '' } = body.credentials;
+    if (typeof email !== 'string' || (email && !EMAIL_RX.test(email))) errors.push('credentials.email geçerli bir e-posta olmalı');
+    if (typeof password !== 'string' || password.length > 200) errors.push('credentials.password en fazla 200 karakter olmalı');
+    credentials = { email: email || undefined, password: password || undefined };
+  }
   if (errors.length) throw new Error(errors.join('; '));
-  return { url, mode, durationSec, seed, headed: body.headed === true, confirmLive: body.confirmLive === true };
+  return { url, mode, durationSec, seed, headed: body.headed === true, confirmLive: body.confirmLive === true, personas, credentials };
 }
 
 export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http://localhost:7500' } = {}) {
@@ -61,6 +79,22 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
   let lastReport = null;
   let lastIssues = new Map();
   let lastActions = [];
+  const frames = new Map(); // agent -> latest JPEG Buffer
+  const streams = new Map(); // agent -> Set<{res, fps, last}>
+
+  const pushFrame = (agent, buf) => {
+    frames.set(agent, buf);
+    const set = streams.get(agent);
+    if (!set) return;
+    const now = Date.now();
+    for (const c of set) {
+      if (now - c.last < 1000 / c.fps || c.res.writableLength > 2_000_000) continue;
+      c.last = now;
+      c.res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${buf.length}\r\n\r\n`);
+      c.res.write(buf);
+      c.res.write('\r\n');
+    }
+  };
 
   const broadcast = (event, data) => {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -68,8 +102,8 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
   };
 
   async function startRun(params) {
-    if (session) throw new Error('Zaten çalışan bir hayalet var. Önce durdurun.');
-    const s = new GhostSession(params);
+    if (session) throw new Error('Zaten çalışan bir sürü var. Önce durdurun.');
+    const s = new StampedeSession(params);
     session = s;
     lastReport = null;
     lastIssues = new Map();
@@ -87,13 +121,15 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
       broadcast('issue', d);
     });
     s.on('anomaly', (d) => broadcast('anomaly', d));
-    s.on('frame', (d) => broadcast('frame', d));
+    s.on('frame', (d) => pushFrame(d.agent, Buffer.from(d.data, 'base64')));
+    s.on('decision', (d) => broadcast('decision', d));
+    s.on('outcome', (d) => broadcast('outcome', d));
     s.on('stats', (d) => broadcast('stats', d));
     s.on('error', (d) => broadcast('failed', d));
-    broadcast('started', { config: s.config, mode: s.mode });
+    broadcast('started', { config: s.config, mode: s.mode, personas: s.personas, identity: { email: s.credentials.email, generated: s.credentials.generated } });
     s.run()
       .then(async (report) => {
-        const written = await writeReport(report, REPORTS_DIR);
+        const written = await writeReport(report, reportsDir());
         lastReport = { ...summary(report), reportName: written.name };
         broadcast('done', lastReport);
       })
@@ -111,12 +147,14 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
       seed: report.seed,
       score: report.score,
       grade: report.grade,
+      categories: report.categories,
+      personas: report.personas,
       counts: report.counts,
       stats: report.stats,
       durationMs: report.durationMs,
       issues: report.issues.map((i) => {
-        const { screenshot, steps, ...rest } = i;
-        return { ...stripHeavy({ ...rest, screenshot }), stepCount: steps.length };
+        const { steps, ...rest } = i;
+        return { ...stripHeavy(rest), stepCount: steps.length };
       }),
     };
   }
@@ -151,7 +189,43 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
         return undefined;
       }
       if (req.method === 'GET' && path === '/api/config') {
-        return ok(res, { demoUrl: demoUrl.replace(/\/$/, '') });
+        return ok(res, {
+          demoUrl: demoUrl.replace(/\/$/, ''),
+          personas: PERSONA_ORDER.map((id) => {
+            const p = PERSONAS[id];
+            return { id, code: p.code, label: p.label, tag: p.tag, color: p.color, summary: p.summary, viewport: p.context.viewport };
+          }),
+          moves: MOVE_LABEL,
+          zones: ZONE_LABEL,
+          categories: CATEGORIES.map((c) => ({ id: c.id, label: c.label })),
+          identityFromEnv: Boolean(process.env.STAMPEDE_EMAIL),
+        });
+      }
+      if (req.method === 'GET' && path.startsWith('/api/stream/')) {
+        const agent = path.slice('/api/stream/'.length);
+        if (!PERSONAS[agent]) return fail(res, 404, 'Bilinmeyen ajan');
+        const fps = Math.min(Math.max(Number(url.searchParams.get('fps')) || 4, 1), 15);
+        res.writeHead(200, { 'content-type': 'multipart/x-mixed-replace; boundary=frame', 'cache-control': 'no-store', connection: 'keep-alive' });
+        const client = { res, fps, last: 0 };
+        if (!streams.has(agent)) streams.set(agent, new Set());
+        streams.get(agent).add(client);
+        const last = frames.get(agent);
+        if (last) pushFrame(agent, last);
+        req.on('close', () => streams.get(agent).delete(client));
+        return undefined;
+      }
+      if (req.method === 'POST' && path === '/api/focus') {
+        const { agent } = await readJson(req);
+        if (session && typeof agent === 'string') session.setFocus(agent);
+        return ok(res, { agent });
+      }
+      if (req.method === 'GET' && path.startsWith('/vendor/fonts/')) {
+        const file = path.slice('/vendor/fonts/'.length);
+        const m = /^(schibsted-grotesk|jetbrains-mono)-latin(-ext)?-wght-normal\.woff2$/.exec(file);
+        if (!m) return fail(res, 404, 'Bulunamadı');
+        const body = await readFile(join(FONT_DIRS[m[1]], file));
+        res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=31536000, immutable' });
+        return res.end(body);
       }
       if (req.method === 'GET' && path === '/api/modes') {
         return ok(res, Object.values(MODES).map((m) => ({ id: m.id, label: m.label })));
@@ -170,11 +244,11 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
         return ok(res, { stopping: Boolean(session) });
       }
       if (req.method === 'GET' && path === '/api/reports') {
-        const names = existsSync(REPORTS_DIR) ? (await readdir(REPORTS_DIR)).filter((n) => !n.startsWith('.')).sort().reverse() : [];
+        const names = existsSync(reportsDir()) ? (await readdir(reportsDir())).filter((n) => !n.startsWith('.')).sort().reverse() : [];
         return ok(res, names.slice(0, 30));
       }
       if (req.method === 'GET' && path.startsWith('/reports/')) {
-        return serveStatic(res, REPORTS_DIR, path.slice('/reports/'.length));
+        return serveStatic(res, reportsDir(), path.slice('/reports/'.length));
       }
       if (req.method === 'GET') return serveStatic(res, PUBLIC_DIR, path === '/' ? 'index.html' : path);
       return fail(res, 405, 'Desteklenmeyen istek');
@@ -194,9 +268,9 @@ export async function startDashboard({ port: preferred = Number(process.env.PORT
   return { server, port, url: `http://localhost:${port}` };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startDashboard()
-    .then(({ url }) => process.stdout.write(`👻 RageGhost dashboard: ${url}\n`))
+    .then(({ url }) => process.stdout.write(`Stampede dashboard: ${url}\n`))
     .catch((err) => {
       process.stderr.write(`${err.message}\n`);
       process.exit(1);

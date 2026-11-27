@@ -1,0 +1,56 @@
+// Registry of every move an agent can make (kind -> implementation).
+import { backForward, chaosType, keyMash, navigate, offlineFlap, pickOption, rageClick, reloadSpam, scrollFrenzy, viewportShake } from './actions.js';
+import { escapeSpam, hiddenTamper, idTamper, keyActivate, login, offlineBurst, rotate, sleepWake, slowNet, storageCorrupt, storageFlood, tabWalk, twinTab } from './actions-extra.js';
+
+export const MOVES = Object.freeze({
+  rageClick,
+  type: chaosType,
+  select: pickOption,
+  navigate,
+  backForward,
+  viewport: viewportShake,
+  scroll: scrollFrenzy,
+  keys: keyMash,
+  reload: reloadSpam,
+  offline: offlineFlap,
+  keyActivate,
+  tabWalk,
+  escapeSpam,
+  rotate,
+  sleepWake,
+  idTamper,
+  hiddenTamper,
+  storageCorrupt,
+  storageFlood,
+  login,
+  offlineBurst,
+  twinTab,
+  slowNet,
+});
+
+/** Short, human label for a planned move (shown in the dashboard and the brain graph). */
+export const MOVE_LABEL = Object.freeze({
+  rageClick: 'Öfke tıkı',
+  type: 'Kaotik yazı',
+  select: 'Seçim karıştır',
+  navigate: 'Sayfaya git',
+  backForward: 'Geri/ileri spam',
+  viewport: 'Ekran sarsıntısı',
+  scroll: 'Hızlı kaydırma',
+  keys: 'Klavye ezme',
+  reload: 'F5 spam',
+  offline: 'Bağlantı kopması',
+  keyActivate: 'Enter/Space ile tetikle',
+  tabWalk: 'Tab ile gezin',
+  escapeSpam: 'ESC spam',
+  rotate: 'Telefonu çevir',
+  sleepWake: 'Arka plana at / uyandır',
+  idTamper: 'URL kimliğini değiştir',
+  hiddenTamper: 'Gizli alanları kurcala',
+  storageCorrupt: 'Hafızayı boz',
+  storageFlood: 'Hafızayı doldur',
+  login: 'Test hesabıyla giriş',
+  offlineBurst: 'Öderken bağlantı kopsun',
+  twinTab: 'İkinci sekme çakışması',
+  slowNet: 'Yavaş 3G',
+});

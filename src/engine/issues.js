@@ -86,7 +86,65 @@ export const ISSUE_TYPES = Object.freeze({
     meaning: 'Tarayıcı sekmesi çöktü (bellek taşması veya sonsuz döngü).',
     fix: 'Bellek sızıntılarını ve sonsuz döngüleri profiler ile inceleyin.',
   },
+  'focus-invisible': {
+    title: 'Görünmeyen klavye odağı',
+    meaning: 'Tab ile gelinen elemanın etrafında odak çerçevesi yok; klavye kullanıcısı sayfada nerede olduğunu göremiyor.',
+    fix: 'outline: none kullanmayın; :focus-visible için belirgin bir outline veya box-shadow tanımlayın.',
+  },
+  'keyboard-unreachable': {
+    title: 'Klavyeyle ulaşılamayan kontrol',
+    meaning: 'Tıklanabilir görünen (cursor: pointer) bir eleman Tab ile odaklanamıyor; fare kullanamayan kişi bu işlevi kullanamaz.',
+    fix: 'div/span yerine <button> kullanın ya da role="button", tabindex="0" ve Enter/Space işleyicisi ekleyin.',
+  },
+  'layout-shift': {
+    title: 'Beklenmedik yer kayması (CLS)',
+    meaning: 'Sayfa içeriği kullanıcı bir şey yapmadan yer değiştirdi; kullanıcı yanlış yere tıklayabilir.',
+    fix: 'Görsellere ve geç yüklenen bloklara sabit boyut/yer ayırın (width/height, aspect-ratio, min-height).',
+  },
+  'dom-leak': {
+    title: 'DOM sızıntısı',
+    meaning: 'Aynı ekranda kaldıkça sayfadaki eleman sayısı sürekli artıyor; uzun kullanımda sayfa yavaşlar ve çöker.',
+    fix: 'Yeniden render ederken eski elemanları ve event listener’ları temizleyin; listeleri sanal kaydırma ile sınırlayın.',
+  },
+  'data-leak': {
+    title: 'Hassas veri sızıntısı',
+    meaning: 'Şifre, token, kart veya şifre hash’i gibi hassas veriler konsola yazıldı ya da API yanıtında istemciye gönderildi.',
+    fix: 'Hassas alanları loglamayın; API yanıtlarından gereksiz alanları çıkarın (DTO/serializer ile beyaz liste).',
+  },
+  'insecure-cookie': {
+    title: 'Güvensiz çerez',
+    meaning: 'Oturum çerezi HttpOnly/Secure/SameSite korumaları olmadan ayarlanmış; XSS veya ağ dinleme ile çalınabilir.',
+    fix: 'Oturum çerezlerini HttpOnly; Secure; SameSite=Lax (veya Strict) ile ayarlayın.',
+  },
+  'fragile-api': {
+    title: 'Bozuk API yanıtına dayanıksız arayüz',
+    meaning: 'API beklenmedik veri (null alan, boş liste, bozuk JSON) döndürünce arayüz çöktü.',
+    fix: 'API yanıtlarını şema ile doğrulayın (zod vb.), eksik alanlar için varsayılan değer ve hata durumu gösterin.',
+  },
 });
+
+/** Scorecard categories: each issue type counts against exactly one. */
+export const CATEGORIES = Object.freeze([
+  { id: 'race', label: 'Yarış durumu', types: ['double-submit'] },
+  { id: 'resilience', label: 'Hata dayanıklılığı', types: ['js-exception', 'console-error', 'server-error', 'client-error', 'request-failed', 'fragile-api', 'blank-screen', 'page-crash', 'garbage-render'] },
+  { id: 'mobile', label: 'Mobil & yerleşim', types: ['layout-overflow', 'obscured-element', 'layout-shift'] },
+  { id: 'security', label: 'Güvenlik & veri', types: ['xss', 'data-leak', 'insecure-cookie'] },
+  { id: 'performance', label: 'Performans', types: ['slow-request', 'ui-freeze', 'stuck-spinner', 'dom-leak'] },
+  { id: 'access', label: 'Klavye & etkileşim', types: ['focus-invisible', 'keyboard-unreachable', 'dead-click'] },
+]);
+
+export function categoryOf(type) {
+  return CATEGORIES.find((c) => c.types.includes(type)) || CATEGORIES[1];
+}
+
+/** Per-category 0-100 scores (the report card). */
+export function categoryScores(issues) {
+  return CATEGORIES.map((c) => {
+    const mine = issues.filter((i) => c.types.includes(i.type));
+    const penalty = mine.reduce((s, i) => s + (SEVERITY_PENALTY[i.severity] || 0) * 1.6, 0);
+    return { id: c.id, label: c.label, score: Math.max(0, Math.round(100 - penalty)), issues: mine.length };
+  });
+}
 
 export function normalizePath(url) {
   try {

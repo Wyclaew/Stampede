@@ -1,4 +1,4 @@
-// "Fincan" — a polished little coffee shop with DELIBERATE real-world bugs, used as RageGhost's demo target.
+// "Fincan" — a polished little coffee shop with DELIBERATE real-world bugs, used as Stampede's demo target.
 // Every bug has a fixed twin: open the app with ?fixed=1 (client) which also sends an Idempotency-Key (server).
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -11,18 +11,18 @@ const PUBLIC_DIR = join(here, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 
 export const PRODUCTS = Object.freeze([
-  { id: 1, name: 'Etiyopya Yirgacheffe', note: 'Bergamot · yasemin · limon', price: 340, color: '#c084fc', emoji: '☕' },
-  { id: 2, name: 'Kolombiya Huila', note: 'Karamel · kırmızı elma', price: 295, color: '#fb923c', emoji: '🫘' },
-  { id: 3, name: 'Kenya AA', note: 'Frenk üzümü · greyfurt', price: 385, color: '#f472b6', emoji: '🍒' },
-  { id: 4, name: 'Brezilya Cerrado', note: 'Fındık · bitter çikolata', price: 260, color: '#a3e635', emoji: '🌰' },
-  { id: 5, name: 'Guatemala Antigua', note: 'Kakao · baharat', price: 310, color: '#38bdf8', emoji: '🌋' },
-  { id: 6, name: 'Hario V60 Set', note: 'Demleme seti · cam', price: 890, color: '#facc15', emoji: '🧪' },
+  { id: 1, name: 'Etiyopya Yirgacheffe', note: 'Bergamot · yasemin · limon', price: 340, color: '#c084fc', mark: 'ET' },
+  { id: 2, name: 'Kolombiya Huila', note: 'Karamel · kırmızı elma', price: 295, color: '#fb923c', mark: 'KH' },
+  { id: 3, name: 'Kenya AA', note: 'Frenk üzümü · greyfurt', price: 385, color: '#f472b6', mark: 'KE' },
+  { id: 4, name: 'Brezilya Cerrado', note: 'Fındık · bitter çikolata', price: 260, color: '#a3e635', mark: 'BC' },
+  { id: 5, name: 'Guatemala Antigua', note: 'Kakao · baharat', price: 310, color: '#38bdf8', mark: 'GA' },
+  { id: 6, name: 'Hario V60 Set', note: 'Demleme seti · cam', price: 890, color: '#facc15', mark: 'V60' },
 ]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function createDemoState() {
-  return { cart: [{ productId: 1, qty: 1 }, { productId: 6, qty: 1 }], orders: [], idempotency: new Map(), mutationCount: 0, seq: 1000 };
+  return { cart: [{ productId: 1, qty: 1 }, { productId: 6, qty: 1 }], orders: [], users: [], idempotency: new Map(), mutationCount: 0, seq: 1000 };
 }
 
 function json(res, status, data) {
@@ -106,8 +106,31 @@ export function createDemoServer(state = createDemoState()) {
         return json(res, 200, PRODUCTS.slice(0, 3));
       }
 
+      if ((path === '/api/login' || path === '/api/signup') && req.method === 'POST') {
+        const body = await readBody(req);
+        const email = String(body.email || '').trim().toLowerCase();
+        const password = String(body.password || '');
+        const fixed = req.headers['x-build'] === 'fixed';
+        if (!email.includes('@') || password.length < 6) return json(res, 422, { error: 'E-posta veya şifre geçersiz' });
+        await sleep(700);
+        let user = state.users.find((u) => u.email === email);
+        if (path === '/api/signup') {
+          // BUG #13 (server): no uniqueness check, every click creates another account
+          if (fixed && user) return json(res, 409, { error: 'Bu e-posta zaten kayıtlı' });
+          user = { id: state.users.length + 1, email, passwordHash: `sha1$${Buffer.from(password).toString('base64')}`, createdAt: Date.now() };
+          state.users.push(user);
+        } else if (!user) {
+          return json(res, 401, { error: 'Hesap bulunamadı' });
+        }
+        const sid = Math.random().toString(36).slice(2);
+        // BUG #12 (insecure cookie): session cookie readable from JavaScript, no SameSite
+        res.setHeader('set-cookie', fixed ? `session=${sid}; Path=/; HttpOnly; SameSite=Lax` : `session=${sid}; Path=/`);
+        // BUG #11b (data leak): the whole user record, password hash included, is sent to the browser
+        return json(res, path === '/api/signup' ? 201 : 200, fixed ? { id: user.id, email: user.email } : user);
+      }
+
       if (path === '/api/stats' && req.method === 'GET') {
-        return json(res, 200, { orders: state.orders.length, totalCharged: state.orders.reduce((s, o) => s + o.total, 0), mutations: state.mutationCount, cartCount: cartSummary(state).count });
+        return json(res, 200, { orders: state.orders.length, users: state.users.length, totalCharged: state.orders.reduce((s, o) => s + o.total, 0), mutations: state.mutationCount, cartCount: cartSummary(state).count });
       }
 
       if (path === '/api/reset' && req.method === 'POST') {
@@ -139,9 +162,9 @@ export async function startDemo(preferred = Number(process.env.DEMO_PORT) || DEF
   return { server, state, port, url: `http://localhost:${port}` };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startDemo()
-    .then(({ url }) => process.stdout.write(`☕ Fincan demo mağazası: ${url}  (düzeltilmiş sürüm: ${url}/?fixed=1)\n`))
+    .then(({ url }) => process.stdout.write(`Fincan demo mağazası: ${url}  (düzeltilmiş sürüm: ${url}/?fixed=1)\n`))
     .catch((err) => {
       process.stderr.write(`${err.message}\n`);
       process.exit(1);

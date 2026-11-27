@@ -48,7 +48,7 @@ export function renderHtml(report) {
     .join('');
   return `<!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RageGhost Raporu · ${esc(report.origin)}</title>
+<title>Stampede Raporu · ${esc(report.origin)}</title>
 <style>
 :root{--bg:#0d0a1a;--panel:#161127;--line:#2a2145;--text:#ece9f7;--muted:#a59fc4;--accent:#a78bfa;--crit:#f43f5e;--high:#fb923c;--med:#facc15;--low:#38bdf8}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -86,7 +86,7 @@ footer{color:var(--muted);margin-top:30px;font-size:13px}
 <h2>Bulunan sorunlar (${report.issues.length})</h2>
 ${issues}
 <details><summary>Hayaletin tüm aksiyonları (${report.actions.length})</summary><table>${actions}</table></details>
-<footer>RageGhost v${esc(report.version)} · Aynı senaryoyu tekrar oynatmak için seed <code>${esc(report.seed)}</code> kullanın: <code>npx rageghost run ${esc(report.target)} --mode ${esc(report.mode.id)} --seed ${esc(report.seed)}</code></footer>
+<footer>Stampede v${esc(report.version)} · Aynı senaryoyu tekrar oynatmak için seed <code>${esc(report.seed)}</code> kullanın: <code>npx stampede run ${esc(report.target)} --mode ${esc(report.mode.id)} --seed ${esc(report.seed)}</code></footer>
 </div>
 <script>
 document.querySelectorAll('[data-copy]').forEach(function(b){b.addEventListener('click',function(){var pre=b.nextElementSibling;navigator.clipboard.writeText(pre.textContent).then(function(){b.textContent='Kopyalandı ✓';setTimeout(function(){b.textContent='Kopyala'},1500)})})});

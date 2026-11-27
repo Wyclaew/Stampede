@@ -1,4 +1,4 @@
-// RageGhost dashboard client. All target-derived text goes through textContent (never innerHTML).
+// Stampede dashboard client. All target-derived text goes through textContent (never innerHTML).
 const $ = (id) => document.getElementById(id);
 const SEV_LABEL = { critical: 'Kritik', high: 'Yüksek', medium: 'Orta', low: 'Düşük' };
 const SEV_ORDER = ['critical', 'high', 'medium', 'low'];
@@ -208,7 +208,7 @@ function showDone(r) {
   $('doneText').textContent = ` ${r.stats.actions} aksiyon · ${(r.durationMs / 1000).toFixed(0)} sn · seed ${r.seed}`;
   $('doneLinks').replaceChildren(
     h('a', { class: 'main', href: `${base}/report.html`, target: '_blank', rel: 'noopener' }, '📄 HTML rapor'),
-    h('a', { href: `${base}/rageghost.spec.js`, target: '_blank', rel: 'noopener', download: 'rageghost.spec.js' }, '🧪 Playwright testleri'),
+    h('a', { href: `${base}/stampede.spec.js`, target: '_blank', rel: 'noopener', download: 'stampede.spec.js' }, '🧪 Playwright testleri'),
     h('a', { href: `${base}/report.md`, target: '_blank', rel: 'noopener' }, 'MD'),
     h('a', { href: `${base}/report.json`, target: '_blank', rel: 'noopener' }, 'JSON'),
   );

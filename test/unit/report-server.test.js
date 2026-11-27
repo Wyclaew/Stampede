@@ -7,7 +7,7 @@ import { renderMarkdown } from '../../src/report/index.js';
 import { playwrightLocator, stableName } from '../../src/engine/locator.js';
 import { parseRunRequest } from '../../src/server/index.js';
 import { listenWithFallback } from '../../src/util/listen.js';
-import { parseArgs } from '../../bin/rageghost.js';
+import { parseArgs } from '../../bin/stampede.js';
 
 const step = (over) => ({ seq: 1, kind: 'rageClick', label: '‘Öde’ butonu 3 kez hızlıca tıkla', urlBefore: 'http://localhost:7500/#/checkout', viewport: { width: 375, height: 667 }, locator: "page.getByRole('button', { name: 'Öde' }).first()", count: 3, ...over });
 const issue = (over) => ({
@@ -17,7 +17,7 @@ const issue = (over) => ({
   ...over,
 });
 const report = (issues) => ({
-  tool: 'RageGhost', version: '1.0.0', target: 'http://localhost:7500/', origin: 'http://localhost:7500', mode: { id: 'chaos', label: 'Tam Kaos' }, seed: 42,
+  tool: 'Stampede', version: '1.0.0', target: 'http://localhost:7500/', origin: 'http://localhost:7500', mode: { id: 'chaos', label: 'Tam Kaos' }, seed: 42,
   startedAt: Date.now() - 1000, finishedAt: Date.now(), durationMs: 1000, stats: { actions: 3, clicks: 3, requests: 5, pagesVisited: 1 },
   counts: { critical: 1, high: 0, medium: 0, low: 0 }, score: 75, grade: { grade: 'C', label: 'x' }, issues, actions: [], anomalies: [],
 });

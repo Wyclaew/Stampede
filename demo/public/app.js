@@ -1,4 +1,4 @@
-/* Fincan demo store. Contains DELIBERATE bugs (marked "BUG #n") for RageGhost to find.
+/* Fincan demo store. Contains DELIBERATE bugs (marked "BUG #n") for Stampede to find.
  * Open with ?fixed=1 to get the corrected implementation of every bug. */
 (function () {
   'use strict';
@@ -13,7 +13,7 @@
   var inflight = 0;
   var discountRate = 0;
 
-  document.getElementById('buildTag').textContent = FIXED ? '✅ FIXED BUILD' : '🐞 BUGGY BUILD';
+  document.getElementById('buildTag').textContent = FIXED ? 'FIXED BUILD' : 'BUGGY BUILD';
 
   var tl = function (n) { return '₺' + Number(n).toLocaleString('tr-TR'); };
 
@@ -86,11 +86,12 @@
 
   function render() {
     var route = currentRoute();
-    var tpl = route.indexOf('#/checkout') === 0 ? 'tpl-checkout' : route.indexOf('#/orders') === 0 ? 'tpl-orders' : 'tpl-shop';
+    var tpl = route.indexOf('#/checkout') === 0 ? 'tpl-checkout' : route.indexOf('#/orders') === 0 ? 'tpl-orders' : route.indexOf('#/account') === 0 ? 'tpl-account' : 'tpl-shop';
     view.replaceChildren(document.getElementById(tpl).content.cloneNode(true));
     document.querySelectorAll('.site-head nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === route); });
     if (tpl === 'tpl-shop') mountShop();
     else if (tpl === 'tpl-checkout') mountCheckout();
+    else if (tpl === 'tpl-account') mountAccount();
     else mountOrders();
     window.scrollTo(0, 0);
   }
@@ -99,11 +100,23 @@
   function card(p) {
     var el = document.createElement('article');
     el.className = 'card';
-    el.innerHTML = '<div class="art" style="--c:' + p.color + '">' + p.emoji + '</div>' +
+    el.innerHTML = '<div class="art" style="--c:' + p.color + '"><span class="mark"></span></div>' +
       '<div class="body"><h3></h3><p class="note"></p><div class="row"><b class="price"></b>' +
       '<button type="button" class="fav" aria-label="Favorilere ekle">♡</button>' +
       '<button type="button" class="add">Sepete ekle</button></div></div>';
+    el.querySelector('.mark').textContent = p.mark;
     el.querySelector('h3').textContent = p.name;
+    var art = el.querySelector('.art');
+    var quickView = function () { toast(p.name + ' · ' + p.note); };
+    // BUG #15 (keyboard): the product image opens a quick view on click, but it is a plain div that
+    // Tab can never reach. Fixed build makes it a real button.
+    art.addEventListener('click', quickView);
+    if (FIXED) {
+      art.setAttribute('role', 'button');
+      art.setAttribute('tabindex', '0');
+      art.setAttribute('aria-label', p.name + ' hızlı bakış');
+      art.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); quickView(); } });
+    }
     el.querySelector('.note').textContent = p.note;
     el.querySelector('.price').textContent = tl(p.price);
     var add = el.querySelector('.add');
@@ -168,7 +181,7 @@
       row.replaceChildren.apply(row, recs.map(function (p) {
         var d = document.createElement('div');
         d.className = 'rec';
-        d.textContent = p.emoji + ' ' + p.name;
+        d.textContent = p.name;
         return d;
       }));
     }).catch(function () {});
@@ -201,12 +214,12 @@
     refreshCart().then(function (c) {
       if (!document.getElementById('lines')) return;
       lines.replaceChildren.apply(lines, c.items.map(function (i) {
-        var p = products.find(function (x) { return x.id === i.productId; }) || { name: '?', emoji: '☕' };
+        var p = products.find(function (x) { return x.id === i.productId; }) || { name: '?', mark: '?' };
         var row = document.createElement('div');
         row.className = 'line';
         row.dataset.id = i.productId;
         row.innerHTML = '<span class="e"></span><span class="n"></span><input type="number" min="1" aria-label="Adet"><b class="lt"></b>';
-        row.querySelector('.e').textContent = p.emoji;
+        row.querySelector('.e').textContent = p.mark;
         row.querySelector('.n').textContent = p.name;
         row.querySelector('input').value = i.qty;
         row.querySelector('input').addEventListener('input', computeTotals);
@@ -233,7 +246,8 @@
     });
 
     var pay = document.getElementById('pay');
-    var idemKey = 'ord-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    // Fixed build: the key is derived from the cart, so a second tab paying for the same cart is deduplicated too.
+    var idemKey = function () { return 'ord-' + JSON.stringify(cache.items || []); };
     pay.addEventListener('click', function () {
       // BUG #1 (double charge): the button is NOT disabled while the payment request is in flight
       // and no Idempotency-Key is sent, so every impatient click charges the customer again.
@@ -243,12 +257,44 @@
       pay.classList.add('busy');
       pay.textContent = 'İşleniyor…';
       var headers = { 'content-type': 'application/json' };
-      if (FIXED) headers['idempotency-key'] = idemKey;
+      if (FIXED) headers['idempotency-key'] = idemKey();
       api('/api/orders', { method: 'POST', headers: headers, body: JSON.stringify({ total: total }) })
         .then(function (o) { toast('Ödeme alındı · Sipariş #' + o.id + ' · ' + tl(o.total)); })
         .catch(function () { toast('Ödeme başarısız'); })
         .then(function () { pay.classList.remove('busy'); if (document.getElementById('pay')) computeTotals(); });
     });
+  }
+
+  // ---- account (login / sign-up) ----
+  function mountAccount() {
+    var form = document.getElementById('authForm');
+    var msg = document.getElementById('authMsg');
+    var signup = document.getElementById('signupBtn');
+    var login = document.getElementById('loginBtn');
+    api('/api/stats').then(function (s) { var n = document.getElementById('userCount'); if (n) n.textContent = s.users; }).catch(function () {});
+    document.getElementById('oauth').addEventListener('click', function () { toast('Google girişi bu demoda kapalı'); });
+    function submit(intent, btn) {
+      var email = document.getElementById('email').value;
+      var password = document.getElementById('password').value;
+      // BUG #11 (data leak): credentials end up in the console (and in any log collector).
+      if (!FIXED) console.log('auth attempt', JSON.stringify({ email: email, password: password }));
+      // BUG #13 (double sign-up): the button stays active while the request is in flight.
+      if (FIXED && btn.disabled) return;
+      if (FIXED) btn.disabled = true;
+      msg.textContent = intent === 'signup' ? 'Hesap oluşturuluyor…' : 'Giriş yapılıyor…';
+      var headers = { 'content-type': 'application/json' };
+      if (FIXED) headers['x-build'] = 'fixed';
+      fetch('/api/' + intent, { method: 'POST', headers: headers, body: JSON.stringify({ email: email, password: password }) })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          msg.textContent = res.ok ? 'Hoş geldin, ' + res.d.email : res.d.error;
+          return api('/api/stats').then(function (s) { var n = document.getElementById('userCount'); if (n) n.textContent = s.users; });
+        })
+        .catch(function () { msg.textContent = 'Bağlantı hatası, tekrar deneyin.'; })
+        .then(function () { btn.disabled = false; });
+    }
+    form.addEventListener('submit', function (e) { e.preventDefault(); submit('login', login); });
+    signup.addEventListener('click', function () { submit('signup', signup); });
   }
 
   // ---- orders ledger ----

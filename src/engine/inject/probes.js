@@ -9,7 +9,7 @@ export function discoverElements() {
   let seq = window.__rgSeq || 0;
   const out = [];
   for (const el of document.querySelectorAll(SEL)) {
-    if (el.closest('[data-rageghost]')) continue;
+    if (el.closest('[data-stampede]')) continue;
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
@@ -54,13 +54,163 @@ export function discoverElements() {
     });
   }
   window.__rgSeq = seq;
+
+  // Login / sign-up form: a visible password field plus an identifier field and a submit control.
+  let auth = null;
+  const pw = [...document.querySelectorAll('input[type=password]')].find((p) => p.getBoundingClientRect().width > 4 && !p.disabled);
+  if (pw) {
+    const scope = pw.form || pw.closest('form,[role=dialog],section,main,div') || document.body;
+    const idField = scope.querySelector('input[type=email],input[autocomplete=email],input[autocomplete=username],input[name*=mail i],input[name*=user i],input[type=text]');
+    const pws = [...scope.querySelectorAll('input[type=password]')];
+    const oauthRx = /(google|apple|github|facebook|microsoft|sso|continue with|sign in with|ile giriş|ile devam)/i;
+    const scopeText = (scope.innerText || '').toLowerCase();
+    const wantsSignup = pws.length > 1 || /(kayıt|kaydol|sign up|register|create account|hesap oluştur)/i.test(scopeText);
+    const buttons = [...scope.querySelectorAll('button,input[type=submit],[role=button]')].filter((b) => {
+      const t = (b.innerText || b.value || '').trim();
+      return b.getBoundingClientRect().width > 4 && !oauthRx.test(t);
+    });
+    const textOf = (b) => (b.innerText || b.value || '').trim();
+    const signupBtn = buttons.find((b) => /(kayıt|kaydol|sign up|register|oluştur|create)/i.test(textOf(b)));
+    const loginBtn = buttons.find((b) => /(giriş|login|log in|sign in)/i.test(textOf(b))) || buttons.find((b) => b.type === 'submit');
+    const submit = (wantsSignup && signupBtn) || loginBtn || signupBtn || null;
+    const tag = (n) => {
+      if (!n) return null;
+      let id = n.getAttribute('data-rg-id');
+      if (!id) {
+        id = `e${++seq}`;
+        n.setAttribute('data-rg-id', id);
+      }
+      return id;
+    };
+    auth = {
+      kind: wantsSignup && submit === signupBtn ? 'signup' : 'login',
+      idField: tag(idField),
+      passwords: pws.map(tag),
+      submit: tag(submit),
+      submitText: submit ? (submit.innerText || submit.value || '').trim().slice(0, 40) : '',
+      extra: [...scope.querySelectorAll('input[required]:not([type=password]):not([type=email]):not([type=checkbox]):not([type=hidden])')].filter((n) => n !== idField).map(tag).slice(0, 4),
+      terms: [...scope.querySelectorAll('input[type=checkbox][required]')].map(tag).slice(0, 2),
+    };
+    window.__rgSeq = seq;
+  }
+  let storageKeys = 0;
+  try {
+    storageKeys = localStorage.length + sessionStorage.length;
+  } catch (_) {
+    storageKeys = 0;
+  }
   return {
     url: location.href,
     title: document.title,
     elements: out,
     historyLength: history.length,
     viewport: { width: innerWidth, height: innerHeight },
+    auth,
+    hiddenInputs: document.querySelectorAll('form input[type=hidden]').length,
+    storageKeys,
   };
+}
+
+/** Where keyboard focus is now, and whether it is visible. */
+export function focusInfo() {
+  const el = document.activeElement;
+  if (!el || el === document.body || el === document.documentElement) return { onBody: true };
+  const cs = getComputedStyle(el);
+  const outline = cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;
+  const ring = cs.boxShadow && cs.boxShadow !== 'none';
+  const r = el.getBoundingClientRect();
+  let id = el.getAttribute('data-rg-id');
+  if (!id) {
+    id = `f${Date.now() % 100000}`;
+    el.setAttribute('data-rg-id', id);
+  }
+  return {
+    id,
+    tag: el.tagName.toLowerCase(),
+    text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 40),
+    visibleIndicator: outline || ring,
+    rect: { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) },
+    inModal: Boolean(el.closest('[role=dialog],dialog,[aria-modal=true]')),
+  };
+}
+
+/** Clickable-looking things (cursor:pointer) that a keyboard can never reach. */
+export function keyboardUnreachable() {
+  const FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"]),[contenteditable=true]';
+  const found = [];
+  for (const el of document.body.querySelectorAll('div,span,li,img,svg,p,td,article,section')) {
+    if (found.length >= 5) break;
+    if (el.closest('[data-stampede]') || el.closest(FOCUSABLE)) continue;
+    if (getComputedStyle(el).cursor !== 'pointer') continue;
+    if (el.parentElement && getComputedStyle(el.parentElement).cursor === 'pointer' && !el.parentElement.closest(FOCUSABLE)) continue;
+    if (el.querySelector(FOCUSABLE)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 12 || r.height < 12) continue;
+    let id = el.getAttribute('data-rg-id');
+    if (!id) {
+      id = `k${found.length}${Date.now() % 10000}`;
+      el.setAttribute('data-rg-id', id);
+    }
+    found.push({ id, desc: el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? `.${el.className.trim().split(/\s+/)[0]}` : ''), text: (el.innerText || '').trim().slice(0, 40), rect: { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) } });
+  }
+  return found;
+}
+
+/** Corrupt every storage key (remembering originals) or restore them. */
+export function storageChaos(mode) {
+  const KEY = '__stampede_backup';
+  try {
+    if (mode === 'corrupt') {
+      const backup = { l: {}, s: {} };
+      const junk = ['{', 'null', '[object Object]', '"', '-1', '{"broken":'];
+      let i = 0;
+      for (const [store, tag] of [[localStorage, 'l'], [sessionStorage, 's']]) {
+        for (let k = 0; k < store.length; k++) {
+          const key = store.key(k);
+          if (key === KEY) continue;
+          backup[tag][key] = store.getItem(key);
+        }
+        for (const key of Object.keys(backup[tag])) store.setItem(key, junk[i++ % junk.length]);
+      }
+      window.name = JSON.stringify(backup);
+      return Object.keys(backup.l).length + Object.keys(backup.s).length;
+    }
+    if (mode === 'restore') {
+      const backup = JSON.parse(window.name || '{}');
+      for (const [key, v] of Object.entries(backup.l || {})) localStorage.setItem(key, v);
+      for (const [key, v] of Object.entries(backup.s || {})) sessionStorage.setItem(key, v);
+      window.name = '';
+      return true;
+    }
+    if (mode === 'flood') {
+      const chunk = 'x'.repeat(256 * 1024);
+      let n = 0;
+      try {
+        for (; n < 60; n++) localStorage.setItem(`__stampede_flood_${n}`, chunk);
+      } catch (_) {
+        /* quota reached: exactly the state we want the app to face */
+      }
+      return n;
+    }
+    if (mode === 'unflood') {
+      for (let n = 0; n < 60; n++) localStorage.removeItem(`__stampede_flood_${n}`);
+      return true;
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+/** Change hidden form fields to hostile values. */
+export function tamperHidden() {
+  const values = ['0', '-1', '999999999', 'admin', '<script>', ''];
+  const changed = [];
+  [...document.querySelectorAll('form input[type=hidden]')].slice(0, 6).forEach((el, i) => {
+    changed.push({ name: el.name || el.id || `hidden${i}`, from: el.value.slice(0, 40), to: values[i % values.length] });
+    el.value = values[i % values.length];
+  });
+  return changed;
 }
 
 /** Scroll element into view and return a point where a real click would actually land on it. */
@@ -92,7 +242,7 @@ export function findClickablePoint(id) {
 }
 
 export function readCounters() {
-  return window.__rageghost ? window.__rageghost.counters() : { mutations: 0, url: location.href, scroll: 0 };
+  return window.__stampede ? window.__stampede.counters() : { mutations: 0, url: location.href, scroll: 0 };
 }
 
 /**
@@ -140,7 +290,7 @@ export function runProbes(opts) {
   if (sw > vw + 2) {
     const culprits = [];
     for (const el of body.querySelectorAll('*')) {
-      if (el.closest('[data-rageghost]')) continue;
+      if (el.closest('[data-stampede]')) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       const right = r.right + scrollX;
@@ -159,7 +309,7 @@ export function runProbes(opts) {
   // 2) Interactive elements covered by something else (floating widgets, banners)
   const CTA = /(pay|checkout|buy|order|submit|öde|satın|sipariş|gönder|onayla|sepete|kaydet|devam)/i;
   const items = [...body.querySelectorAll('button,a[href],input:not([type=hidden]),select,textarea,[role=button]')]
-    .filter((el) => !el.closest('[data-rageghost]') && visible(el))
+    .filter((el) => !el.closest('[data-stampede]') && visible(el))
     .slice(0, 250);
   const covered = [];
   const byCoverer = new Map();
@@ -211,7 +361,7 @@ export function runProbes(opts) {
     const m = GARBAGE.exec(t) || (trimmed === 'null' ? [trimmed, '', 'null'] : null);
     if (!m) continue;
     const p = node.parentElement;
-    if (!p || seenParents.has(p) || p.closest('script,style,noscript,textarea,code,pre,[data-rageghost],[contenteditable]')) continue;
+    if (!p || seenParents.has(p) || p.closest('script,style,noscript,textarea,code,pre,[data-stampede],[contenteditable]')) continue;
     if (!visible(p)) continue;
     seenParents.add(p);
     out.garbage.push({ id: tagEl(p), desc: desc(p), token: (m[2] || m[0]).trim(), text: trimmed.slice(0, 80), rect: rectOf(p) });
@@ -223,7 +373,7 @@ export function runProbes(opts) {
     '[aria-busy="true"],[role=progressbar],.spinner,.loader,.loading,[class*="spinner"],[class*="Spinner"],[class*="loader"],[class*="Loader"],[class*="loading"],[class*="Loading"],[class*="skeleton"]';
   const live = {};
   for (const el of body.querySelectorAll(SPIN)) {
-    if (el.closest('[data-rageghost]') || !visible(el)) continue;
+    if (el.closest('[data-stampede]') || !visible(el)) continue;
     const id = tagEl(el);
     live[id] = st.spinners[id] || now;
   }
@@ -243,15 +393,23 @@ export function runProbes(opts) {
     out.blank = textLen < 3 && media === 0;
   }
 
-  // 6) Main-thread freezes
-  if (window.__rageghost) out.longTasks = window.__rageghost.drainLongTasks();
+  // 6) Main-thread freezes + layout shift + DOM size (leak trend)
+  if (window.__stampede) {
+    out.longTasks = window.__stampede.drainLongTasks();
+    out.shifts = window.__stampede.drainShifts();
+  }
+  out.nodeCount = document.getElementsByTagName('*').length;
   return out;
 }
 
 export function markElement({ id, rect, severity, title }) {
-  if (window.__rageghost) window.__rageghost.mark(id || rect || null, severity, title);
+  if (window.__stampede) window.__stampede.mark(id || rect || null, severity, title);
 }
 
 export function ghostSay({ text, kind }) {
-  if (window.__rageghost) window.__rageghost.say(text, kind);
+  if (window.__stampede) window.__stampede.say(text, kind);
+}
+
+export function ghostScan({ targets }) {
+  if (window.__stampede) window.__stampede.scan(targets);
 }

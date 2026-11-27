@@ -7,11 +7,11 @@ async function main() {
     const { chromium } = await import('playwright');
     const browser = await chromium.launch();
     await browser.close();
-    process.stdout.write('RageGhost: Chromium hazır ✓\n');
+    process.stdout.write('Stampede: Chromium hazır ✓\n');
   } catch {
-    process.stdout.write('RageGhost: Chromium indiriliyor (tek seferlik)…\n');
+    process.stdout.write('Stampede: Chromium indiriliyor (tek seferlik)…\n');
     const r = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'install', 'chromium'], { stdio: 'inherit' });
-    if (r.status !== 0) process.stdout.write('RageGhost: Chromium indirilemedi. Sonra deneyin: npx playwright install chromium (veya Google Chrome kurun)\n');
+    if (r.status !== 0) process.stdout.write('Stampede: Chromium indirilemedi. Sonra deneyin: npx playwright install chromium (veya Google Chrome kurun)\n');
   }
 }
 
