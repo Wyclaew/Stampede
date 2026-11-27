@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 
 /** Launch Chromium with graceful fallbacks so a live demo does not die on a missing download. */
 export async function launchBrowser({ headed = false } = {}) {
-  const opts = { headless: !headed, args: ['--disable-blink-features=AutomationControlled', '--no-default-browser-check'] };
+  const opts = { headless: !headed, args: ['--disable-blink-features=AutomationControlled', '--no-default-browser-check', '--disable-features=Translate,TranslateUI', '--hide-crash-restore-bubble', '--no-first-run'] };
   try {
     return await chromium.launch(opts);
   } catch (bundledError) {

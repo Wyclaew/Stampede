@@ -17,7 +17,9 @@
   const CSS = `
   :host { all: initial; }
   .layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647; overflow: hidden; font: 600 12px/1.3 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .cursor { position: absolute; left: 0; top: 0; transform: translate(-100px,-100px); transition: transform 60ms linear; will-change: transform; }
+  .cursor { position: absolute; left: 0; top: 0; transform: translate(-100px,-100px); transform-origin: 2px 2px; will-change: transform; }
+  .cursor.press svg { animation: press .22s cubic-bezier(.16,1,.3,1); }
+  @keyframes press { 40% { transform: scale(.78); } }
   .cursor svg { display: block; width: 22px; height: 26px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)); }
   .cursor .tag { position: absolute; left: 18px; top: 20px; padding: 2px 7px 3px; border-radius: 4px; background: ${C}; color: #0b1015; font: 700 11px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .02em; white-space: nowrap; }
   .ripple { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid ${C}; animation: ripple .5s cubic-bezier(.16,1,.3,1) forwards; }
@@ -38,7 +40,7 @@
   .mark.low .tag { background: #9ba6b1; color: #0b1015; }
   .trail { position: absolute; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: ${C}; opacity: .5; animation: trail .45s linear forwards; }
   @keyframes trail { to { opacity: 0; transform: scale(.3); } }
-  @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } .trail { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .trail { display: none; } .cursor.press svg { animation: none; } }
   `;
 
   const CURSOR_SVG = `<svg viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg"><path d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill="${C}" stroke="#0b1015" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
@@ -72,10 +74,10 @@
     return root ? root.querySelector('.layer') : null;
   }
 
-  function place(x, y) {
+  function place(x, y, tilt = 0) {
     state.lastX = x;
     state.lastY = y;
-    if (cursor) cursor.style.transform = `translate(${x - 2}px, ${y - 2}px)`;
+    if (cursor) cursor.style.transform = `translate(${x - 2}px, ${y - 2}px) rotate(${tilt.toFixed(1)}deg)`;
   }
 
   function spawn(cls, x, y, ttl, text) {
@@ -91,21 +93,52 @@
     return n;
   }
 
-  let trailTick = 0;
-  const onMove = (x, y) => {
+  // The cursor is driven only by the engine (moveTo / press). It deliberately ignores real mouse
+  // events, so a human moving their own mouse over a visible window never disturbs the agent.
+  let anim = 0;
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  function moveTo(x, y, ms) {
     mount();
-    place(x, y);
-    if (++trailTick % 3 === 0) spawn('trail', x, y, 450);
-  };
-  window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY), { capture: true, passive: true });
-  window.addEventListener('touchstart', (e) => e.touches[0] && onMove(e.touches[0].clientX, e.touches[0].clientY), { capture: true, passive: true });
+    const fromX = state.lastX < -50 ? x : state.lastX;
+    const fromY = state.lastY < -50 ? y : state.lastY;
+    const dist = Math.hypot(x - fromX, y - fromY);
+    const duration = ms || Math.min(620, 160 + dist * 0.55);
+    const t0 = performance.now();
+    const tilt = Math.max(-14, Math.min(14, (x - fromX) / 18));
+    cancelAnimationFrame(anim);
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      place(x, y);
+      return 0;
+    }
+    let lastTrail = 0;
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / duration);
+      const e = easeInOut(t);
+      const cx = fromX + (x - fromX) * e;
+      const cy = fromY + (y - fromY) * e;
+      place(cx, cy, tilt * Math.sin(Math.PI * t));
+      if (now - lastTrail > 28 && t < 0.95) {
+        lastTrail = now;
+        spawn('trail', cx, cy, 420);
+      }
+      if (t < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+    return duration;
+  }
 
   const onPress = (x, y) => {
     mount();
+    if (Math.hypot(x - state.lastX, y - state.lastY) > 2) place(x, y);
     const now = Date.now();
     state.burst = now - state.lastClickAt < 450 ? state.burst + 1 : 1;
     state.lastClickAt = now;
     spawn('ripple', x, y, 520);
+    if (cursor) {
+      cursor.classList.remove('press');
+      void cursor.offsetWidth;
+      cursor.classList.add('press');
+    }
     if (state.burst > 1) {
       if (!burstBadge || !burstBadge.isConnected) burstBadge = spawn('burst', x, y, 0);
       if (burstBadge) {
@@ -117,8 +150,6 @@
       }
     }
   };
-  window.addEventListener('mousedown', (e) => onPress(e.clientX, e.clientY), { capture: true, passive: true });
-  window.addEventListener('touchstart', (e) => e.touches[0] && onPress(e.touches[0].clientX, e.touches[0].clientY), { capture: true, passive: true });
   window.addEventListener('resize', () => { state.lastResize = performance.now(); }, { passive: true });
 
   function say(text, kind) {
@@ -220,6 +251,8 @@
     mark,
     scan,
     place,
+    moveTo,
+    press: onPress,
     counters: () => ({ mutations: state.mutations, url: location.href, scroll: Math.round(window.scrollX + window.scrollY * 3) }),
     drainLongTasks: () => state.longTasks.splice(0, state.longTasks.length),
     drainShifts: () => state.shifts.splice(0, state.shifts.length),

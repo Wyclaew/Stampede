@@ -86,6 +86,8 @@ function globalCandidates({ mode, memory, pageKey, snapshot }) {
   if (!memory.storageFlooded) g('storageFlood', 1.5);
   if (mode.allowTransactional && !memory.twinOn.has(pageKey)) g('twinTab', 2.2);
   if (snapshot.auth && !memory.loginTried.has(pageKey)) g('login', 12, 'auth');
+  g('crawl', 5, 'nav');
+  if (snapshot.editableCount > 0 && snapshot.linkCount > 0) g('abandonForm', 4, 'form');
   return out;
 }
 
@@ -101,7 +103,13 @@ function adaptToPersona(c, persona) {
  */
 export function buildCandidates(params) {
   const persona = params.persona || DEFAULT_PERSONA;
-  const snapshot = params.snapshot || { hiddenInputs: 0, storageKeys: 0, auth: null };
+  const raw = params.snapshot || { hiddenInputs: 0, storageKeys: 0, auth: null };
+  const elements = params.elements || [];
+  const snapshot = {
+    ...raw,
+    editableCount: elements.filter((e) => e.editable && e.type !== 'password').length,
+    linkCount: elements.filter((e) => e.tag === 'a' && e.absHref).length,
+  };
   const memory = withMemoryDefaults(params.memory);
   const all = [...elementCandidates({ ...params, memory, persona }), ...globalCandidates({ ...params, memory, snapshot })]
     .map((c) => adaptToPersona(c, persona))
@@ -136,8 +144,17 @@ export function collapseDuplicates(candidates, rng) {
 }
 
 /** Decide the next move and return the ranked field it was chosen from (for the brain view). */
+/** Boost candidates that match a pending AI plan step for this agent (x5) and tag them for the brain view. */
+export function applyAiHints(candidates, hints) {
+  if (!hints || !hints.length) return candidates;
+  return candidates.map((c) => {
+    const hint = hints.find((h) => h.kind === c.kind && (!h.target || (c.el && (c.el.text || '').toLocaleLowerCase('tr-TR').includes(h.target.toLocaleLowerCase('tr-TR')))));
+    return hint ? { ...c, weight: c.weight * 5, ai: hint.index } : c;
+  });
+}
+
 export function decide(params, rng) {
-  const candidates = collapseDuplicates(buildCandidates(params), rng).filter((c) => c.weight > 0);
+  const candidates = applyAiHints(collapseDuplicates(buildCandidates(params), rng), params.aiHints).filter((c) => c.weight > 0);
   const total = candidates.reduce((s, c) => s + c.weight, 0) || 1;
   const ranked = [...candidates].sort((a, b) => b.weight - a.weight).map((c) => ({ ...c, p: c.weight / total }));
   let choice = null;

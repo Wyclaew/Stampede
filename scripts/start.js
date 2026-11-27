@@ -3,6 +3,8 @@
 import { spawn } from 'node:child_process';
 import { startDemo } from '../demo/server.js';
 import { startDashboard } from '../src/server/index.js';
+import { loadEnv } from '../src/util/env.js';
+import { aiEnabled } from '../src/ai/gemini.js';
 
 function openBrowser(url) {
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
@@ -15,6 +17,7 @@ function openBrowser(url) {
 }
 
 async function main() {
+  loadEnv();
   const demo = await startDemo();
   const dash = await startDashboard({ demoUrl: demo.url });
   const out = [
@@ -25,12 +28,19 @@ async function main() {
     `  Demo (hatalı)  ${demo.url}`,
     `  Demo (düzgün)  ${demo.url}/?fixed=1`,
     '',
+    `  AI (Gemini)    ${aiEnabled() ? 'açık (.env GEMINI_API_KEY)' : 'kapalı: .env dosyasına GEMINI_API_KEY ekleyin'}`,
+    '',
     '  Durdurmak için Ctrl+C',
     '',
   ];
   process.stdout.write(out.join('\n'));
   if (!process.argv.includes('--no-open')) openBrowser(dash.url);
-  const shutdown = () => {
+  let closing = false;
+  const shutdown = async () => {
+    if (closing) return;
+    closing = true;
+    process.stdout.write('\n  Kapatılıyor: açık tarayıcılar düzgünce kapatılıyor…\n');
+    await dash.shutdown();
     demo.server.close();
     dash.server.close();
     process.exit(0);

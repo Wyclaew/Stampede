@@ -1,30 +1,46 @@
-// Decision graph: zones the agent sees -> weighted candidate moves -> outcomes.
-// Draws on demand; animates only while a signal is travelling (and never with reduced motion).
+// Decision graph. Two views:
+//  • "all":   every agent's latest decision on one canvas: zone it targets -> its chosen move -> outcome, in agent colours
+//  • agent:   one agent's full reasoning: zones -> weighted candidates -> outcomes
+// Signals travel along edges as small particles; the loop only runs while something moves.
 const ZONES = ['auth', 'checkout', 'search', 'form', 'nav', 'content', 'page'];
 const OUTCOMES = [
-  { id: 'react', label: 'Sayfa tepki verdi' },
-  { id: 'net', label: 'Ağ isteği gitti' },
+  { id: 'react', label: 'Tepki verdi' },
+  { id: 'net', label: 'Ağ isteği' },
   { id: 'issue', label: 'Sorun bulundu' },
   { id: 'dead', label: 'Tepki yok' },
 ];
 const C = {
-  text: 'oklch(0.93 0.008 250)',
-  muted: 'oklch(0.72 0.02 250)',
-  faint: 'oklch(0.5 0.018 250)',
-  line: 'oklch(0.33 0.014 250)',
-  crit: 'oklch(0.66 0.22 25)',
+  text: '#e4e8ed',
+  muted: '#9ba6b1',
+  faint: '#5d6873',
+  line: '#2a323b',
+  lineSoft: '#1f262e',
+  node: '#161c22',
+  crit: '#fc4447',
+  ai: '#5aea98',
 };
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SANS = '"Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif';
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
 
-export function createBrain(canvas, { zoneLabels, colorOf }) {
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+export function createBrain(canvas, { zoneLabels, agentInfo }) {
   const ctx = canvas.getContext('2d');
-  const state = new Map(); // agent -> { decision, outcome, outcomeAt, decidedAt, tally }
-  let focus = null;
+  const agents = new Map(); // id -> { decision, decidedAt, outcome, outcomeAt, tally }
+  let view = 'all';
+  let order = [];
+  let particles = [];
   let raf = 0;
+  const totals = { react: 0, net: 0, issue: 0, dead: 0 };
+  const byOutcome = { react: {}, net: {}, issue: {}, dead: {} };
 
-  const agentState = (id) => {
-    if (!state.has(id)) state.set(id, { decision: null, outcome: null, decidedAt: 0, outcomeAt: 0, tally: { react: 0, net: 0, issue: 0, dead: 0 } });
-    return state.get(id);
+  const st = (id) => {
+    if (!agents.has(id)) agents.set(id, { decision: null, decidedAt: 0, outcome: null, outcomeAt: 0, tally: { react: 0, net: 0, issue: 0, dead: 0 } });
+    return agents.get(id);
   };
 
   function size() {
@@ -38,193 +54,356 @@ export function createBrain(canvas, { zoneLabels, colorOf }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { w, h };
   }
-
-  const font = (px, weight = 500, mono = false) => `${weight} ${px}px ${mono ? '"JetBrains Mono", ui-monospace, monospace' : '"Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif'}`;
-
+  const font = (px, weight = 500, mono = false) => `${weight} ${px}px ${mono ? MONO : SANS}`;
   function ellipsize(text, max) {
     if (ctx.measureText(text).width <= max) return text;
     let t = text;
     while (t.length > 1 && ctx.measureText(`${t}…`).width > max) t = t.slice(0, -1);
     return `${t}…`;
   }
-
-  function curve(x1, y1, x2, y2) {
-    const mx = (x1 + x2) / 2;
+  function rounded(x, y, w, h, r) {
     ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+    ctx.roundRect(x, y, w, h, r);
+  }
+  const bez = (a, b) => {
+    const mx = (a[0] + b[0]) / 2;
+    return [a, [mx, a[1]], [mx, b[1]], b];
+  };
+  function strokeBez(p, color, width, alpha) {
+    ctx.beginPath();
+    ctx.moveTo(p[0][0], p[0][1]);
+    ctx.bezierCurveTo(p[1][0], p[1][1], p[2][0], p[2][1], p[3][0], p[3][1]);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = width;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  function onBez(p, t) {
+    const u = 1 - t;
+    const x = u * u * u * p[0][0] + 3 * u * u * t * p[1][0] + 3 * u * t * t * p[2][0] + t * t * t * p[3][0];
+    const y = u * u * u * p[0][1] + 3 * u * u * t * p[1][1] + 3 * u * t * t * p[2][1] + t * t * t * p[3][1];
+    return [x, y];
+  }
+  function spawnParticles(path, color, count = 3, delay = 0) {
+    if (reduceMotion) return;
+    const now = performance.now();
+    for (let i = 0; i < count; i++) particles.push({ path, color, t0: now + delay + i * 140, dur: 700 });
   }
 
-  function pointOn(x1, y1, x2, y2, t) {
-    const mx = (x1 + x2) / 2;
-    const u = 1 - t;
-    const x = u * u * u * x1 + 3 * u * u * t * mx + 3 * u * t * t * mx + t * t * t * x2;
-    const y = u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y2;
-    return [x, y];
+  // ---------- layout helpers ----------
+  function columns(w) {
+    const zoneW = Math.max(150, Math.min(180, w * 0.21));
+    const outW = Math.max(120, Math.min(160, w * 0.17));
+    const gap = Math.max(36, w * 0.06);
+    return { zoneX: 0, zoneW, candX: zoneW + gap, candW: w - zoneW - outW - gap * 2, outX: w - outW, outW };
+  }
+  function drawHeaders(L, left, mid, right) {
+    ctx.font = font(11, 600);
+    ctx.fillStyle = C.faint;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(left, L.zoneX, 9);
+    ctx.fillText(mid, L.candX, 9);
+    ctx.fillText(right, L.outX, 9);
+  }
+  function zoneNodes(L, top, h, massOf, colorsOf) {
+    const rowH = (h - top) / ZONES.length;
+    const pos = {};
+    ZONES.forEach((z, i) => {
+      const y = top + rowH * i + rowH / 2;
+      const mass = massOf(z);
+      const x = L.zoneX;
+      const w = L.zoneW - 8;
+      rounded(x, y - 15, w, 30, 8);
+      ctx.fillStyle = C.node;
+      ctx.fill();
+      ctx.strokeStyle = mass > 0 ? '#3a4652' : C.lineSoft;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      const cols = colorsOf(z);
+      if (cols.length) {
+        const segW = (w - 2) / Math.max(cols.length, 1);
+        cols.forEach((c, k) => {
+          ctx.fillStyle = c;
+          ctx.fillRect(x + 1 + k * segW, y + 12, segW - 1, 2);
+        });
+      }
+      ctx.font = font(13, mass > 0 ? 600 : 400);
+      ctx.fillStyle = mass > 0 ? C.text : C.faint;
+      ctx.fillText(ellipsize(zoneLabels[z] || z, w - 22), x + 10, y - 1);
+      pos[z] = [x + w, y];
+    });
+    return pos;
+  }
+  function outcomeNodes(L, top, h, now) {
+    const rowH = (h - top) / OUTCOMES.length;
+    const pos = {};
+    OUTCOMES.forEach((o, i) => {
+      const y = top + rowH * i + rowH / 2;
+      const x = L.outX;
+      const w = L.outW;
+      rounded(x, y - 20, w, 40, 8);
+      ctx.fillStyle = C.node;
+      ctx.fill();
+      ctx.strokeStyle = o.id === 'issue' && totals.issue ? rgba('#fc4447', 0.55) : C.lineSoft;
+      ctx.stroke();
+      ctx.font = font(12, 600);
+      ctx.fillStyle = o.id === 'issue' && totals.issue ? C.crit : C.muted;
+      ctx.fillText(o.label, x + 10, y - 7);
+      ctx.font = font(15, 700, true);
+      ctx.fillStyle = C.text;
+      ctx.textAlign = 'right';
+      ctx.fillText(String(view === 'all' ? totals[o.id] : (agents.get(view) || st(view)).tally[o.id]), x + w - 10, y - 6);
+      ctx.textAlign = 'left';
+      // stacked agent contribution bar
+      const contrib = byOutcome[o.id];
+      const sum = Object.values(contrib).reduce((s, v) => s + v, 0);
+      let bx = x + 10;
+      const bw = w - 20;
+      if (sum && view === 'all') {
+        for (const id of order) {
+          const v = contrib[id] || 0;
+          if (!v) continue;
+          const seg = (bw * v) / sum;
+          ctx.fillStyle = agentInfo(id).color;
+          ctx.fillRect(bx, y + 9, Math.max(1, seg - 1), 3);
+          bx += seg;
+        }
+      } else {
+        ctx.fillStyle = C.line;
+        ctx.fillRect(bx, y + 9, bw, 3);
+      }
+      pos[o.id] = [x, y];
+    });
+    return pos;
+  }
+  const outcomeIds = (o) => (o ? [o.issues > 0 ? 'issue' : null, o.requests > 0 ? 'net' : null, o.dead ? 'dead' : null, o.ok && !o.dead ? 'react' : null].filter(Boolean) : []);
+
+  // ---------- views ----------
+  function drawAll(w, h, now) {
+    const L = columns(w);
+    const top = 28;
+    drawHeaders(L, 'HEDEF BÖLGE', 'AJANLARIN SON KARARI', 'SONUÇ');
+    const live = order.filter((id) => agents.get(id) && agents.get(id).decision);
+    const zoneCount = {};
+    const zoneColors = {};
+    for (const id of live) {
+      const c = agents.get(id).decision.candidates.find((x) => x.chosen);
+      if (!c) continue;
+      zoneCount[c.zone] = (zoneCount[c.zone] || 0) + 1;
+      (zoneColors[c.zone] = zoneColors[c.zone] || []).push(agentInfo(id).color);
+    }
+    const zpos = zoneNodes(L, top, h, (z) => zoneCount[z] || 0, (z) => zoneColors[z] || []);
+    const opos = outcomeNodes(L, top, h, now);
+    const rows = Math.max(live.length, 4);
+    const rowH = Math.min(46, (h - top) / rows);
+    const y0 = top + ((h - top) - rowH * live.length) / 2;
+    live.forEach((id, i) => {
+      const s = agents.get(id);
+      const info = agentInfo(id);
+      const d = s.decision;
+      const chosen = d.candidates.find((x) => x.chosen) || d.candidates[0];
+      const y = y0 + rowH * i + rowH / 2;
+      const left = [L.candX, y];
+      const right = [L.candX + L.candW, y];
+      const age = now - s.decidedAt;
+      const fresh = Math.max(0, 1 - age / 1400);
+      strokeBez(bez(zpos[chosen.zone] || zpos.page, left), info.color, 1.5 + fresh * 1.5, 0.35 + fresh * 0.55);
+      // row
+      rounded(L.candX, y - rowH / 2 + 4, L.candW, rowH - 8, 7);
+      ctx.fillStyle = fresh > 0.05 ? rgba(info.color, 0.07 + fresh * 0.08) : C.node;
+      ctx.fill();
+      ctx.font = font(11, 700, true);
+      const chipW = ctx.measureText(info.code).width + 12;
+      rounded(L.candX + 8, y - 9, chipW, 18, 4);
+      ctx.fillStyle = info.color;
+      ctx.fill();
+      ctx.fillStyle = '#0b1015';
+      ctx.fillText(info.code, L.candX + 14, y + 0.5);
+      const distW = Math.min(90, L.candW * 0.22);
+      const labelX = L.candX + 16 + chipW;
+      const labelMax = L.candW - chipW - distW - 70;
+      ctx.font = font(13, 600);
+      ctx.fillStyle = C.text;
+      ctx.fillText(ellipsize(chosen.label, labelMax), labelX, y);
+      if (chosen.ai) {
+        const lw = Math.min(ctx.measureText(chosen.label).width, labelMax);
+        ctx.font = font(10, 700, true);
+        ctx.fillStyle = C.ai;
+        ctx.fillText('AI', labelX + lw + 8, y);
+      }
+      // probability distribution of the top candidates
+      const top5 = d.candidates.slice(0, 6);
+      const bx = L.candX + L.candW - distW - 48;
+      const bw = distW / top5.length;
+      top5.forEach((c, k) => {
+        const bh = Math.max(2, (rowH - 22) * Math.min(1, c.p * 2.2));
+        ctx.fillStyle = c.chosen ? info.color : '#38424c';
+        ctx.fillRect(bx + k * bw, y + (rowH - 22) / 2 - bh + 2, bw - 3, bh);
+      });
+      ctx.font = font(12, 600, true);
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(chosen.p * 100)}%`, L.candX + L.candW - 8, y);
+      ctx.textAlign = 'left';
+      // outcome edges
+      const ofresh = Math.max(0, 1 - (now - s.outcomeAt) / 1600);
+      if (s.outcome && ofresh > 0) {
+        for (const oid of outcomeIds(s.outcome)) {
+          strokeBez(bez(right, opos[oid]), oid === 'issue' ? C.crit : info.color, 1.5, ofresh * 0.9);
+        }
+      }
+      s.rowAnchors = { left, right, zone: zpos[chosen.zone] || zpos.page };
+    });
+    if (!live.length) emptyMsg(w, h, 'Sürü başlayınca her ajanın kararı burada kendi renginde akar.');
+    return { zpos, opos };
+  }
+
+  function drawAgent(id, w, h, now) {
+    const L = columns(w);
+    const top = 28;
+    const info = agentInfo(id);
+    drawHeaders(L, 'GÖRDÜĞÜ BÖLGELER', `${info.code} · TARTTIĞI HAMLELER`, 'SONUÇ');
+    const s = agents.get(id);
+    const d = s && s.decision;
+    const zones = d ? d.zones || {} : {};
+    const zpos = zoneNodes(L, top, h, (z) => zones[z] || 0, (z) => (zones[z] ? [info.color] : []));
+    const opos = outcomeNodes(L, top, h, now);
+    if (!d) {
+      emptyMsg(w, h, 'Bu ajan henüz karar vermedi.');
+      return;
+    }
+    const cands = d.candidates;
+    const rowH = Math.min(36, (h - top) / Math.max(cands.length, 6));
+    const y0 = top + ((h - top) - rowH * cands.length) / 2;
+    const fresh = Math.max(0, 1 - (now - s.decidedAt) / 1400);
+    cands.forEach((c, i) => {
+      const y = y0 + rowH * i + rowH / 2;
+      const left = [L.candX, y];
+      strokeBez(bez(zpos[c.zone] || zpos.page, left), c.chosen ? info.color : '#3a4652', c.chosen ? 2 + fresh * 1.5 : 1 + c.p * 4, c.chosen ? 0.5 + fresh * 0.5 : 0.25 + c.p);
+      if (c.chosen) {
+        rounded(L.candX, y - rowH / 2 + 3, L.candW, rowH - 6, 6);
+        ctx.fillStyle = rgba(info.color, 0.08 + fresh * 0.1);
+        ctx.fill();
+      }
+      ctx.fillStyle = c.chosen ? info.color : '#38424c';
+      ctx.fillRect(L.candX, y - 8, 3, 16);
+      const barMax = Math.min(150, L.candW * 0.28);
+      ctx.font = font(13, c.chosen ? 700 : 400);
+      ctx.fillStyle = c.chosen ? C.text : C.muted;
+      const lbl = ellipsize(c.label, L.candW - barMax - 80);
+      ctx.fillText(lbl, L.candX + 12, y);
+      if (c.ai) {
+        ctx.font = font(10, 700, true);
+        ctx.fillStyle = C.ai;
+        ctx.fillText('AI', L.candX + 20 + ctx.measureText(lbl).width * 1.08, y);
+      }
+      const bx = L.candX + L.candW - barMax - 44;
+      ctx.fillStyle = C.lineSoft;
+      ctx.fillRect(bx, y - 2, barMax, 4);
+      ctx.fillStyle = c.chosen ? info.color : '#5d6873';
+      ctx.fillRect(bx, y - 2, Math.max(2, barMax * Math.min(1, c.p * 2)), 4);
+      ctx.font = font(12, 600, true);
+      ctx.fillStyle = c.chosen ? C.text : C.faint;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(c.p * 100)}%`, L.candX + L.candW - 4, y);
+      ctx.textAlign = 'left';
+      if (c.chosen) {
+        s.rowAnchors = { left, right: [L.candX + L.candW, y], zone: zpos[c.zone] || zpos.page };
+        const ofresh = Math.max(0, 1 - (now - s.outcomeAt) / 1600);
+        if (s.outcome && ofresh > 0) for (const oid of outcomeIds(s.outcome)) strokeBez(bez([L.candX + L.candW, y], opos[oid]), oid === 'issue' ? C.crit : info.color, 1.8, ofresh);
+      }
+    });
+    ctx.font = font(12, 500, true);
+    ctx.fillStyle = C.faint;
+  }
+
+  function emptyMsg(w, h, text) {
+    ctx.font = font(14, 400);
+    ctx.fillStyle = C.faint;
+    ctx.textAlign = 'center';
+    ctx.fillText(text, w / 2, h / 2 + 10);
+    ctx.textAlign = 'left';
+  }
+
+  function drawParticles(now) {
+    particles = particles.filter((p) => now - p.t0 < p.dur);
+    for (const p of particles) {
+      const t = (now - p.t0) / p.dur;
+      if (t < 0) continue;
+      for (let k = 0; k < 4; k++) {
+        const tt = Math.max(0, t - k * 0.04);
+        const [x, y] = onBez(p.path, tt);
+        ctx.beginPath();
+        ctx.arc(x, y, 3 - k * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(p.color, 1 - k * 0.25);
+        ctx.fill();
+      }
+    }
   }
 
   function draw() {
     raf = 0;
     const { w, h } = size();
-    ctx.clearRect(0, 0, w, h);
-    const s = focus ? state.get(focus) : null;
-    const color = focus ? colorOf(focus) : C.muted;
     const now = performance.now();
-
-    const top = 26;
-    const zoneX = 0;
-    const zoneW = Math.min(170, w * 0.22);
-    const outW = Math.min(170, w * 0.22);
-    const outX = w - outW;
-    const candX = zoneW + Math.max(40, w * 0.08);
-    const candW = outX - candX - Math.max(40, w * 0.08);
-
+    ctx.clearRect(0, 0, w, h);
     ctx.textBaseline = 'middle';
-    ctx.font = font(11, 600);
-    ctx.fillStyle = C.faint;
-    ctx.fillText('GÖRDÜĞÜ BÖLGELER', zoneX, 8);
-    ctx.fillText('TARTTIĞI HAMLELER', candX, 8);
-    ctx.fillText('SONUÇ', outX, 8);
-
-    const zoneRowH = (h - top) / ZONES.length;
-    const zoneY = (i) => top + zoneRowH * i + zoneRowH / 2;
-    const d = s && s.decision;
-    const cands = d ? d.candidates : [];
-    const candRowH = (h - top) / Math.max(cands.length, 8);
-    const candY = (i) => top + candRowH * i + candRowH / 2;
-    const outRowH = (h - top) / OUTCOMES.length;
-    const outY = (i) => top + outRowH * i + outRowH / 2;
-
-    // edges zone -> candidate
-    if (d) {
-      cands.forEach((c, i) => {
-        const zi = Math.max(0, ZONES.indexOf(c.zone));
-        curve(zoneX + zoneW, zoneY(zi), candX - 6, candY(i));
-        ctx.strokeStyle = c.chosen ? color : C.line;
-        ctx.globalAlpha = c.chosen ? 1 : Math.min(0.9, 0.25 + c.p * 2.2);
-        ctx.lineWidth = c.chosen ? 2.5 : 1 + c.p * 3;
-        ctx.stroke();
-      });
-      ctx.globalAlpha = 1;
-    }
-
-    // zones
-    ZONES.forEach((z, i) => {
-      const mass = d && d.zones ? d.zones[z] || 0 : 0;
-      const y = zoneY(i);
-      ctx.font = font(13, mass > 0 ? 600 : 400);
-      ctx.fillStyle = mass > 0 ? C.text : C.faint;
-      ctx.fillText(zoneLabels[z] || z, zoneX, y - 7);
-      ctx.fillStyle = C.line;
-      ctx.fillRect(zoneX, y + 6, zoneW - 10, 3);
-      if (mass > 0) {
-        ctx.fillStyle = color;
-        ctx.fillRect(zoneX, y + 6, Math.max(3, (zoneW - 10) * Math.min(1, mass)), 3);
-      }
-    });
-
-    // candidates
-    const barMax = Math.max(40, Math.min(150, candW * 0.3));
-    cands.forEach((c, i) => {
-      const y = candY(i);
-      ctx.fillStyle = c.chosen ? color : C.line;
-      ctx.fillRect(candX, y - 9, 3, 18);
-      ctx.font = font(13, c.chosen ? 700 : 400);
-      ctx.fillStyle = c.chosen ? C.text : C.muted;
-      ctx.fillText(ellipsize(c.label, candW - barMax - 60), candX + 12, y);
-      const bx = candX + candW - barMax - 44;
-      ctx.fillStyle = C.line;
-      ctx.fillRect(bx, y - 2, barMax, 4);
-      ctx.fillStyle = c.chosen ? color : C.muted;
-      ctx.fillRect(bx, y - 2, Math.max(2, barMax * Math.min(1, c.p * 2)), 4);
-      ctx.font = font(12, 600, true);
-      ctx.fillStyle = c.chosen ? C.text : C.faint;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${Math.round(c.p * 100)}%`, candX + candW, y);
-      ctx.textAlign = 'left';
-    });
-
-    // outcomes
-    const chosenIdx = cands.findIndex((c) => c.chosen);
-    const o = s && s.outcome;
-    const lit = o ? new Set([o.issues > 0 ? 'issue' : null, o.requests > 0 ? 'net' : null, o.dead ? 'dead' : null, o.ok && !o.dead ? 'react' : null].filter(Boolean)) : new Set();
-    const fresh = o && now - s.outcomeAt < 1600;
-    OUTCOMES.forEach((oc, i) => {
-      const y = outY(i);
-      if (fresh && lit.has(oc.id) && chosenIdx >= 0) {
-        curve(candX + candW + 6, candY(chosenIdx), outX - 8, y);
-        ctx.strokeStyle = oc.id === 'issue' ? C.crit : color;
-        ctx.globalAlpha = 1 - (now - s.outcomeAt) / 1600;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-      const on = fresh && lit.has(oc.id);
-      ctx.font = font(13, on ? 700 : 500);
-      ctx.fillStyle = on ? (oc.id === 'issue' ? C.crit : C.text) : C.muted;
-      ctx.fillText(oc.label, outX, y - 7);
-      ctx.font = font(12, 600, true);
-      ctx.fillStyle = oc.id === 'issue' && s && s.tally.issue ? C.crit : C.faint;
-      ctx.fillText(String(s ? s.tally[oc.id] : 0), outX, y + 10);
-    });
-
-    // travelling signal on the chosen edge
-    let animating = false;
-    if (d && chosenIdx >= 0 && !reduceMotion) {
-      const t = (now - s.decidedAt) / 650;
-      if (t < 1) {
-        const c = cands[chosenIdx];
-        const zi = Math.max(0, ZONES.indexOf(c.zone));
-        const [px, py] = pointOn(zoneX + zoneW, zoneY(zi), candX - 6, candY(chosenIdx), t);
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(px, py, 4, 0, Math.PI * 2);
-        ctx.fill();
-        animating = true;
-      }
-      if (fresh) animating = true;
-    }
-    if (!d) {
-      ctx.font = font(14, 400);
-      ctx.fillStyle = C.faint;
-      ctx.fillText('Sürü başlayınca seçili ajanın her kararı burada görünür.', candX + 12, top + (h - top) / 2);
-    }
-    if (animating) raf = requestAnimationFrame(draw);
+    if (view === 'all') drawAll(w, h, now);
+    else drawAgent(view, w, h, now);
+    drawParticles(now);
+    const busy = particles.length > 0 || [...agents.values()].some((s) => now - s.decidedAt < 1500 || now - s.outcomeAt < 1700);
+    if (busy && !reduceMotion) raf = requestAnimationFrame(draw);
   }
-
   const schedule = () => {
     if (!raf) raf = requestAnimationFrame(draw);
   };
-
   new ResizeObserver(schedule).observe(canvas);
 
   return {
-    setFocus(id) {
-      focus = id;
+    setAgents(ids) {
+      order = ids.slice();
+      schedule();
+    },
+    setView(v) {
+      view = v;
       schedule();
     },
     decision(id, data) {
-      const s = agentState(id);
+      const s = st(id);
       s.decision = data;
       s.decidedAt = performance.now();
-      if (id === focus) schedule();
+      if (view === 'all' || view === id) {
+        draw();
+        if (s.rowAnchors) spawnParticles(bez(s.rowAnchors.zone, s.rowAnchors.left), agentInfo(id).color, 3);
+        schedule();
+      }
     },
     outcome(id, data) {
-      const s = agentState(id);
+      const s = st(id);
       s.outcome = data;
       s.outcomeAt = performance.now();
-      if (data.issues > 0) s.tally.issue += data.issues;
-      if (data.requests > 0) s.tally.net += 1;
-      if (data.dead) s.tally.dead += 1;
-      else if (data.ok) s.tally.react += 1;
-      if (id === focus) schedule();
-    },
-    reset() {
-      state.clear();
+      for (const oid of outcomeIds(data)) {
+        totals[oid] += oid === 'issue' ? data.issues : 1;
+        s.tally[oid] += oid === 'issue' ? data.issues : 1;
+        byOutcome[oid][id] = (byOutcome[oid][id] || 0) + 1;
+      }
+      if ((view === 'all' || view === id) && s.rowAnchors) {
+        const { w } = size();
+        const L = columns(w);
+        const rowH = (canvas.clientHeight - 28) / OUTCOMES.length;
+        for (const oid of outcomeIds(data)) {
+          const i = OUTCOMES.findIndex((o) => o.id === oid);
+          spawnParticles(bez(s.rowAnchors.right, [L.outX, 28 + rowH * i + rowH / 2]), oid === 'issue' ? C.crit : agentInfo(id).color, 2);
+        }
+      }
       schedule();
     },
-    current(id) {
-      return state.get(id);
+    reset() {
+      agents.clear();
+      particles = [];
+      for (const k of Object.keys(totals)) totals[k] = 0;
+      for (const k of Object.keys(byOutcome)) byOutcome[k] = {};
+      schedule();
     },
   };
 }

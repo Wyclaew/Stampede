@@ -6,11 +6,12 @@ import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { StampedeSession, stripHeavy } from '../engine/session.js';
 import { MODES, isLocalUrl, ZONE_LABEL } from '../engine/safety.js';
-import { PERSONAS, PERSONA_ORDER } from '../engine/personas.js';
+import { PERSONAS, PERSONA_ORDER, DEFAULT_SWARM, MAX_AGENTS, MAX_PER_PERSONA, buildRoster } from '../engine/personas.js';
 import { MOVE_LABEL } from '../engine/moves.js';
 import { CATEGORIES } from '../engine/issues.js';
 import { writeReport } from '../report/index.js';
 import { listenWithFallback } from '../util/listen.js';
+import { loadEnv } from '../util/env.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..', '..');
@@ -21,6 +22,40 @@ const FONT_DIRS = {
   'schibsted-grotesk': join(ROOT, 'node_modules', '@fontsource-variable', 'schibsted-grotesk', 'files'),
   'jetbrains-mono': join(ROOT, 'node_modules', '@fontsource-variable', 'jetbrains-mono', 'files'),
 };
+const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+/**
+ * Local API hardening:
+ *  - Host must be localhost (blocks DNS-rebinding pages from talking to this server),
+ *  - writes must be JSON (forces a CORS preflight that we never grant) and come from our own origin.
+ * Without this any website open in the same browser could start a swarm against a site of its choice.
+ */
+export function checkRequestOrigin(req) {
+  const host = req.headers.host || '';
+  if (!LOCAL_HOSTS.test(host)) return 'Sadece localhost üzerinden erişilebilir.';
+  if (req.method === 'GET' || req.method === 'HEAD') return null;
+  const ct = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (ct !== 'application/json') return 'İstek application/json olmalı.';
+  const origin = req.headers.origin;
+  if (origin && origin !== 'null') {
+    let o;
+    try {
+      o = new URL(origin);
+    } catch {
+      return 'Geçersiz Origin.';
+    }
+    if (o.host !== host) return 'Başka bir siteden gelen istek reddedildi.';
+  }
+  return null;
+}
+
+function sameOrigin(a, b) {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
 const EMAIL_RX = /^[^\s@]{1,64}@[^\s@]{1,190}$/;
 const MAX_BODY = 64 * 1024;
 
@@ -61,7 +96,15 @@ export function parseRunRequest(body) {
   const seed = body.seed === undefined || body.seed === '' || body.seed === null ? undefined : Number(body.seed);
   if (seed !== undefined && !Number.isInteger(seed)) errors.push('seed tam sayı olmalı');
   const personas = body.personas === undefined ? ['rage'] : body.personas;
-  if (!Array.isArray(personas) || !personas.length || personas.some((p) => !PERSONA_ORDER.includes(p))) errors.push(`personas şunlardan en az biri olmalı: ${PERSONA_ORDER.join(', ')}`);
+  if (!Array.isArray(personas) || !personas.length || personas.some((p) => !PERSONA_ORDER.includes(p))) {
+    errors.push(`personas şunlardan en az biri olmalı: ${PERSONA_ORDER.join(', ')}`);
+  } else {
+    try {
+      buildRoster(personas);
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
   let credentials;
   if (body.credentials && (body.credentials.email || body.credentials.password)) {
     const { email = '', password = '' } = body.credentials;
@@ -70,12 +113,13 @@ export function parseRunRequest(body) {
     credentials = { email: email || undefined, password: password || undefined };
   }
   if (errors.length) throw new Error(errors.join('; '));
-  return { url, mode, durationSec, seed, headed: body.headed === true, confirmLive: body.confirmLive === true, personas, credentials };
+  return { url, mode, durationSec, seed, headed: body.headed === true, confirmLive: body.confirmLive === true, personas, credentials, resetDemo: body.resetDemo !== false, ai: body.ai !== false };
 }
 
 export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http://localhost:7500' } = {}) {
   const clients = new Set();
   let session = null;
+  let runPromise = Promise.resolve();
   let lastReport = null;
   let lastIssues = new Map();
   let lastActions = [];
@@ -104,6 +148,10 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
   async function startRun(params) {
     if (session) throw new Error('Zaten çalışan bir sürü var. Önce durdurun.');
     const s = new StampedeSession(params);
+    // Demo runs start from a clean store: previous orders, accounts and cart contents are wiped.
+    if (params.resetDemo && sameOrigin(params.url, demoUrl)) {
+      await fetch(`${demoUrl.replace(/\/$/, '')}/api/reset`, { method: 'POST' }).catch(() => null);
+    }
     session = s;
     lastReport = null;
     lastIssues = new Map();
@@ -124,10 +172,11 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
     s.on('frame', (d) => pushFrame(d.agent, Buffer.from(d.data, 'base64')));
     s.on('decision', (d) => broadcast('decision', d));
     s.on('outcome', (d) => broadcast('outcome', d));
+    s.on('aiplan', (d) => broadcast('aiplan', d));
     s.on('stats', (d) => broadcast('stats', d));
     s.on('error', (d) => broadcast('failed', d));
-    broadcast('started', { config: s.config, mode: s.mode, personas: s.personas, identity: { email: s.credentials.email, generated: s.credentials.generated } });
-    s.run()
+    broadcast('started', { config: s.config, mode: s.mode, personas: s.roster.map((r) => ({ id: r.id, persona: r.persona.id, code: r.code, label: r.label, tag: r.tag, color: r.color, viewport: r.persona.context.viewport })), identity: { email: s.credentials.email, generated: s.credentials.generated } });
+    runPromise = s.run()
       .then(async (report) => {
         const written = await writeReport(report, reportsDir());
         lastReport = { ...summary(report), reportName: written.name };
@@ -149,6 +198,7 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
       grade: report.grade,
       categories: report.categories,
       personas: report.personas,
+      ai: report.ai,
       counts: report.counts,
       stats: report.stats,
       durationMs: report.durationMs,
@@ -175,7 +225,17 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    const path = decodeURIComponent(url.pathname);
+    let path;
+    try {
+      path = decodeURIComponent(url.pathname);
+    } catch {
+      return fail(res, 400, 'Geçersiz yol');
+    }
+    const guard = checkRequestOrigin(req);
+    if (guard) return fail(res, 403, guard);
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.setHeader('referrer-policy', 'no-referrer');
+    if (!path.startsWith('/reports/')) res.setHeader('x-frame-options', 'DENY');
     try {
       if (req.method === 'GET' && path === '/api/events') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
@@ -193,8 +253,11 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
           demoUrl: demoUrl.replace(/\/$/, ''),
           personas: PERSONA_ORDER.map((id) => {
             const p = PERSONAS[id];
-            return { id, code: p.code, label: p.label, tag: p.tag, color: p.color, summary: p.summary, viewport: p.context.viewport };
+            return { id, label: p.label, tag: p.tag, summary: p.summary, viewport: p.context.viewport };
           }),
+          defaultSwarm: DEFAULT_SWARM,
+          limits: { maxAgents: MAX_AGENTS, maxPerPersona: MAX_PER_PERSONA },
+          ai: Boolean(process.env.GEMINI_API_KEY),
           moves: MOVE_LABEL,
           zones: ZONE_LABEL,
           categories: CATEGORIES.map((c) => ({ id: c.id, label: c.label })),
@@ -203,7 +266,7 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
       }
       if (req.method === 'GET' && path.startsWith('/api/stream/')) {
         const agent = path.slice('/api/stream/'.length);
-        if (!PERSONAS[agent]) return fail(res, 404, 'Bilinmeyen ajan');
+        if (!/^[a-z]+(-[2-9])?$/.test(agent) || !PERSONAS[agent.split('-')[0]]) return fail(res, 404, 'Bilinmeyen ajan');
         const fps = Math.min(Math.max(Number(url.searchParams.get('fps')) || 4, 1), 15);
         res.writeHead(200, { 'content-type': 'multipart/x-mixed-replace; boundary=frame', 'cache-control': 'no-store', connection: 'keep-alive' });
         const client = { res, fps, last: 0 };
@@ -257,18 +320,27 @@ export function createDashboardServer({ demoUrl = process.env.DEMO_URL || 'http:
     }
   });
 
-  return { server, stopSession: () => session && session.stop() };
+  /** Stop a running swarm and wait for its browser to close (never leave Chrome to be killed). */
+  async function shutdown(timeoutMs = 10000) {
+    if (session) session.stop();
+    await Promise.race([runPromise.catch(() => null), new Promise((r) => setTimeout(r, timeoutMs))]);
+    for (const set of streams.values()) for (const c of set) c.res.end();
+    for (const c of clients) c.end();
+  }
+
+  return { server, stopSession: () => session && session.stop(), shutdown };
 }
 
 export const DEFAULT_DASHBOARD_PORT = 7400;
 
 export async function startDashboard({ port: preferred = Number(process.env.PORT) || DEFAULT_DASHBOARD_PORT, demoUrl } = {}) {
-  const { server } = createDashboardServer({ demoUrl });
+  const { server, shutdown } = createDashboardServer({ demoUrl });
   const port = await listenWithFallback(server, preferred);
-  return { server, port, url: `http://localhost:${port}` };
+  return { server, shutdown, port, url: `http://localhost:${port}` };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  loadEnv();
   startDashboard()
     .then(({ url }) => process.stdout.write(`Stampede dashboard: ${url}\n`))
     .catch((err) => {

@@ -116,6 +116,16 @@ export const ISSUE_TYPES = Object.freeze({
     meaning: 'Oturum çerezi HttpOnly/Secure/SameSite korumaları olmadan ayarlanmış; XSS veya ağ dinleme ile çalınabilir.',
     fix: 'Oturum çerezlerini HttpOnly; Secure; SameSite=Lax (veya Strict) ile ayarlayın.',
   },
+  'ai-visual': {
+    title: 'AI görsel inceleme bulgusu',
+    meaning: 'Gemini, ekran görüntüsünde gerçek bir kullanıcının fark edeceği görsel bir kusur gördü (üst üste binen metin, kesik buton, okunmayan kontrast gibi). Model çıktısıdır, gözle doğrulayın.',
+    fix: 'Ekran görüntüsündeki bölgeyi ilgili ekran genişliğinde açıp düzenini düzeltin.',
+  },
+  'form-data-lost': {
+    title: 'Geri gelince form verisi kayboldu',
+    meaning: 'Kullanıcı forma yazdıktan sonra başka sayfaya geçip geri döndüğünde yazdıkları silinmiş.',
+    fix: 'Taslağı sessionStorage veya URL state ile saklayın, bfcache’i bozan unload dinleyicilerinden kaçının, SPA’da form state’ini route değişiminde koruyun.',
+  },
   'fragile-api': {
     title: 'Bozuk API yanıtına dayanıksız arayüz',
     meaning: 'API beklenmedik veri (null alan, boş liste, bozuk JSON) döndürünce arayüz çöktü.',
@@ -127,10 +137,10 @@ export const ISSUE_TYPES = Object.freeze({
 export const CATEGORIES = Object.freeze([
   { id: 'race', label: 'Yarış durumu', types: ['double-submit'] },
   { id: 'resilience', label: 'Hata dayanıklılığı', types: ['js-exception', 'console-error', 'server-error', 'client-error', 'request-failed', 'fragile-api', 'blank-screen', 'page-crash', 'garbage-render'] },
-  { id: 'mobile', label: 'Mobil & yerleşim', types: ['layout-overflow', 'obscured-element', 'layout-shift'] },
+  { id: 'mobile', label: 'Mobil & yerleşim', types: ['layout-overflow', 'obscured-element', 'layout-shift', 'ai-visual'] },
   { id: 'security', label: 'Güvenlik & veri', types: ['xss', 'data-leak', 'insecure-cookie'] },
   { id: 'performance', label: 'Performans', types: ['slow-request', 'ui-freeze', 'stuck-spinner', 'dom-leak'] },
-  { id: 'access', label: 'Klavye & etkileşim', types: ['focus-invisible', 'keyboard-unreachable', 'dead-click'] },
+  { id: 'access', label: 'Klavye & etkileşim', types: ['focus-invisible', 'keyboard-unreachable', 'dead-click', 'form-data-lost'] },
 ]);
 
 export function categoryOf(type) {

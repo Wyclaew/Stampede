@@ -1,6 +1,6 @@
 // Persona-specific and "bad day" moves: keyboard walking, rotation, sleep/wake, URL tampering,
 // storage corruption, auth autopilot, network drops at the worst moment, twin-tab desync.
-import { discoverElements, focusInfo, ghostSay, keyboardUnreachable, readCounters, storageChaos, tamperHidden } from './inject/probes.js';
+import { authOutcome, discoverElements, focusInfo, ghostSay, keyboardUnreachable, readCounters, storageChaos, tamperHidden } from './inject/probes.js';
 import { baseStep, didReact, focusEl, glideTo, pointFor, press } from './actions.js';
 import { humanName, playwrightLocator } from './locator.js';
 import { classifyElement, isAllowed } from './safety.js';
@@ -9,7 +9,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const quiet = (p) => p.catch(() => null);
 const say = (page, text, kind) => quiet(page.evaluate(ghostSay, { text, kind }));
 const placeAt = (page, rect) =>
-  quiet(page.evaluate((r) => window.__stampede && window.__stampede.place(r.left + Math.min(r.width / 2, 40), r.top + r.height / 2), rect));
+  quiet(page.evaluate((r) => window.__stampede && window.__stampede.moveTo(r.left + Math.min(r.width / 2, 40), r.top + r.height / 2, 260), rect));
 
 export async function keyActivate(ctx, cand) {
   const { page, rng, mode } = ctx;
@@ -221,7 +221,9 @@ async function fillField(ctx, id, value) {
   ctx.counters.keystrokes += value.length;
 }
 
-/** Auth autopilot: fill a login/sign-up form with the run's test identity and (when allowed) submit it. */
+/** Auth autopilot: fill a login/sign-up form with the run's test identity and (when allowed) submit it.
+ * With a generated identity there is no account yet, so when both buttons exist it signs up first and
+ * then logs in with the same identity. */
 export async function login(ctx) {
   const { page, rng, mode, persona } = ctx;
   const snap = await quiet(page.evaluate(discoverElements));
@@ -229,46 +231,66 @@ export async function login(ctx) {
   ctx.memory.loginTried.add(ctx.pageKey());
   if (!auth || !auth.passwords.length) return null;
   const creds = ctx.credentials;
-  const email = auth.kind === 'signup' ? creds.signupEmail(ctx.agentCode) : creds.email;
-  await say(page, auth.kind === 'signup' ? 'KAYIT OL  test hesabı' : 'GİRİŞ YAP  test hesabı');
-  await fillField(ctx, auth.idField, email);
-  for (const id of auth.passwords) await fillField(ctx, id, creds.password);
-  for (const id of auth.extra) await fillField(ctx, id, 'Stampede Test');
-  for (const id of auth.terms) {
-    const pt = await pointFor(ctx, { id });
-    if (pt) await press(ctx, pt.x, pt.y);
+  const plan = [];
+  if (auth.signupBtn && auth.loginBtn && auth.signupBtn !== auth.loginBtn) {
+    if (!ctx.memory.signedUp) plan.push({ kind: 'signup', btn: auth.signupBtn, text: auth.signupText, email: creds.email });
+    plan.push({ kind: 'login', btn: auth.loginBtn, text: auth.loginText, email: creds.email });
+  } else {
+    const kind = auth.kind;
+    plan.push({ kind, btn: auth.submit, text: auth.submitText, email: kind === 'signup' ? creds.signupEmail(ctx.agentCode) : creds.email });
   }
   const step = {
     ...baseStep(ctx, 'login', null),
-    authKind: auth.kind,
-    email,
-    idLocator: auth.idField ? `page.locator('[data-rg-id="${auth.idField}"]')` : null,
-    submitText: auth.submitText,
-    label: `${auth.kind === 'signup' ? 'Kayıt' : 'Giriş'} formunu test hesabıyla (${email}) doldur`,
+    authKind: plan[plan.length - 1].kind,
+    email: plan[plan.length - 1].email,
+    idLocator: auth.idField ? 'email' : null,
+    attempts: [],
+    label: '',
   };
-  if (!mode.allowTransactional || !auth.submit) {
-    await say(page, 'GÖNDERİLMEDİ  güvenli mod');
-    step.label += ' (güvenli mod: gönderilmedi)';
-    return step;
-  }
-  const count = persona && persona.id === 'rage' ? rng.int(2, 3) : 1;
-  const before = page.url();
-  if (persona && persona.keyboardOnly) {
-    for (let i = 0; i < count; i++) await quiet(page.keyboard.press('Enter'));
-  } else {
-    const pt = await pointFor(ctx, { id: auth.submit });
-    if (pt) {
-      await glideTo(ctx, pt.x, pt.y);
-      for (let i = 0; i < count; i++) {
-        await press(ctx, pt.x, pt.y);
-        await sleep(rng.int(30, 80));
+  const results = [];
+  for (const attempt of plan) {
+    await say(page, attempt.kind === 'signup' ? 'KAYIT OL  test hesabı' : 'GİRİŞ YAP  test hesabı');
+    await fillField(ctx, auth.idField, attempt.email);
+    for (const id of auth.passwords) await fillField(ctx, id, creds.password);
+    for (const id of auth.extra) await fillField(ctx, id, 'Stampede Test');
+    for (const id of auth.terms) {
+      const pt = await pointFor(ctx, { id });
+      if (pt) await press(ctx, pt.x, pt.y);
+    }
+    if (!mode.allowTransactional || !attempt.btn) {
+      await say(page, 'GÖNDERİLMEDİ  güvenli mod');
+      results.push(`${attempt.kind === 'signup' ? 'kayıt' : 'giriş'} formu dolduruldu, güvenli mod gereği gönderilmedi`);
+      step.attempts.push({ kind: attempt.kind, email: attempt.email, submitText: attempt.text, submitCount: 0 });
+      break;
+    }
+    const count = persona && persona.id === 'rage' ? rng.int(2, 3) : 1;
+    const before = page.url();
+    if (persona && persona.keyboardOnly) {
+      await focusEl(ctx, { id: attempt.btn });
+      for (let i = 0; i < count; i++) await quiet(page.keyboard.press('Enter'));
+    } else {
+      const pt = await pointFor(ctx, { id: attempt.btn });
+      if (pt) {
+        await glideTo(ctx, pt.x, pt.y);
+        for (let i = 0; i < count; i++) {
+          await press(ctx, pt.x, pt.y);
+          await sleep(rng.int(30, 80));
+        }
       }
     }
+    await sleep(1600);
+    if (attempt.kind === 'signup') ctx.memory.signedUp = true;
+    const out = (await quiet(page.evaluate(authOutcome))) || { message: '', passwordVisible: true, url: before };
+    const left = out.url !== before || !out.passwordVisible;
+    const verdict = left ? 'form kapandı / sayfa değişti' : out.message ? `sayfa: “${out.message}”` : 'form hâlâ ekranda';
+    results.push(`${attempt.kind === 'signup' ? 'kayıt' : 'giriş'} (${attempt.email}): ${verdict}`);
+    step.attempts.push({ kind: attempt.kind, email: attempt.email, submitText: attempt.text, submitCount: count });
+    ctx.authEvent(`${attempt.kind === 'signup' ? 'Kayıt' : 'Giriş'} denendi: ${verdict}`);
+    if (left) break;
   }
-  await sleep(1600);
-  step.submitCount = count;
-  step.navigated = page.url() !== before;
-  step.label += ` ve “${auth.submitText || 'gönder'}” butonuna ${count} kez bas`;
+  step.submitCount = step.attempts.length ? step.attempts[step.attempts.length - 1].submitCount : 0;
+  step.submitText = step.attempts.length ? step.attempts[step.attempts.length - 1].submitText : '';
+  step.label = `Test hesabıyla ${results.join('; ')}`;
   return step;
 }
 
@@ -362,4 +384,89 @@ export async function slowNet(ctx) {
   await quiet(ctx.cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }));
   await quiet(page.waitForLoadState('domcontentloaded', { timeout: 6000 }));
   return step;
+}
+
+/** Find a field again after navigation (data-rg-id is gone): by id, name, then placeholder. */
+function fieldSignature(el) {
+  return { elId: el.elId || '', name: el.name || '', placeholder: el.placeholder || '', tag: el.tag };
+}
+
+/** Start filling a form, leave the page, come back: is the half-typed text still there? */
+export async function abandonForm(ctx, cand) {
+  const { page, rng } = ctx;
+  const snap = await quiet(page.evaluate(discoverElements));
+  const fields = snap ? snap.elements.filter((e) => e.editable && e.type !== 'password' && (e.elId || e.name || e.placeholder)) : [];
+  const links = snap ? snap.elements.filter((e) => e.tag === 'a' && e.absHref && e.absHref.startsWith(new URL(page.url()).origin) && e.href !== '#') : [];
+  if (!fields.length || !links.length) return null;
+  const field = rng.pick(fields);
+  const value = `Yarım kalan not ${rng.int(100, 999)}`;
+  const pt = await pointFor(ctx, field);
+  if (pt) {
+    await glideTo(ctx, pt.x, pt.y);
+    await press(ctx, pt.x, pt.y);
+  }
+  await focusEl(ctx, field);
+  await quiet(page.keyboard.type(value, { delay: 12 }));
+  ctx.counters.keystrokes += value.length;
+  await say(page, 'YARIDA BIRAK');
+  const link = rng.pick(links);
+  const from = page.url();
+  const lpt = await pointFor(ctx, link);
+  if (!lpt) return null;
+  await glideTo(ctx, lpt.x, lpt.y);
+  await press(ctx, lpt.x, lpt.y);
+  await quiet(page.waitForLoadState('domcontentloaded', { timeout: 5000 }));
+  await sleep(700);
+  if (page.url() === from) return null;
+  await say(page, 'GERİ DÖN');
+  await quiet(page.goBack({ waitUntil: 'domcontentloaded', timeout: 5000 }));
+  await sleep(900);
+  const sig = fieldSignature(field);
+  const kept = await quiet(
+    page.evaluate((s) => {
+      const q = s.elId ? `#${CSS.escape(s.elId)}` : s.name ? `${s.tag}[name="${s.name}"]` : `${s.tag}[placeholder="${s.placeholder}"]`;
+      const n = document.querySelector(q);
+      return n ? { found: true, value: n.value || '' } : { found: false };
+    }, sig),
+  );
+  const step = {
+    ...baseStep(ctx, 'abandonForm', field),
+    urlBefore: from,
+    value,
+    linkLocator: playwrightLocator(link),
+    label: `${humanName(field)} içine “${value}” yaz, ${humanName(link)} ile başka sayfaya geç, tarayıcıda geri dön`,
+  };
+  if (kept && kept.found && !kept.value.includes(value)) {
+    ctx.report({
+      type: 'form-data-lost',
+      severity: 'medium',
+      fingerprint: `lost|${new URL(from).pathname}${new URL(from).hash}|${sig.elId || sig.name || sig.placeholder}`,
+      detail: `${humanName(field)} içine yazılan metin, başka sayfaya geçip geri dönünce silinmiş. Kullanıcı formu baştan doldurmak zorunda.`,
+      evidence: [`yazılan: “${value}”`, `geri dönünce: “${kept.value}”`],
+    });
+  }
+  return step;
+}
+
+/** A bot-like sweep: open several same-origin links back to back without waiting for full loads. */
+export async function crawl(ctx) {
+  const { page, rng } = ctx;
+  const origin = new URL(page.url()).origin;
+  const snap = await quiet(page.evaluate(discoverElements));
+  if (!snap) return null;
+  const urls = [...new Set(snap.elements.filter((e) => e.tag === 'a' && e.absHref && e.absHref.startsWith(origin)).map((e) => e.absHref))]
+    .filter((u) => !ctx.memory.visited.has(u))
+    .slice(0, 6);
+  // Nothing new to visit: check the two files every public site is expected to serve.
+  if (!urls.length) urls.push(`${origin}/robots.txt`, `${origin}/sitemap.xml`);
+  await say(page, `TARA ×${urls.length}`);
+  const start = page.url();
+  for (const u of urls) {
+    await quiet(page.goto(u, { waitUntil: 'commit', timeout: 6000 }));
+    ctx.memory.visited.add(u);
+    await sleep(rng.int(120, 300));
+  }
+  await quiet(page.waitForLoadState('domcontentloaded', { timeout: 5000 }));
+  await sleep(500);
+  return { ...baseStep(ctx, 'crawl', null), urlBefore: start, urls, label: `Bekleme yapmadan ${urls.length} adresi art arda aç` };
 }

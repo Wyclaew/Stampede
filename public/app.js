@@ -10,18 +10,20 @@ const SEV_SHAPE = {
   medium: '<circle cx="4.5" cy="4.5" r="4" fill="currentColor"/>',
   low: '<rect x=".75" y=".75" width="7.5" height="7.5" fill="none" stroke="currentColor" stroke-width="1.5"/>',
 };
-const PHASE_LABEL = { idle: 'Hazır', launching: 'Tarayıcı açılıyor', loading: 'Ajanlar sayfayı açıyor', running: 'Sürü çalışıyor', finishing: 'Rapor yazılıyor', done: 'Bitti', failed: 'Hata' };
-const ANOM_LABEL = { js: 'JS', console: 'KONSOL', network: 'AĞ', blocked: 'ENGEL', nav: 'NAV', chaos: 'KAOS' };
+const PHASE_LABEL = { idle: 'Hazır', launching: 'Tarayıcı açılıyor', loading: 'Ajanlar sayfayı açıyor', running: 'Sürü çalışıyor', finishing: 'Bitiriliyor', done: 'Bitti', failed: 'Hata' };
+const ANOM_LABEL = { js: 'JS', console: 'KONSOL', network: 'AĞ', blocked: 'ENGEL', nav: 'NAV', chaos: 'KAOS', auth: 'GİRİŞ', ai: 'AI' };
 const FPS_FOCUS = 10;
 const FPS_OTHER = 3;
 
 const state = {
   config: null,
-  personas: new Map(),
+  counts: {},
+  roster: new Map(), // agent id -> { id, code, label, color, viewport }
+  order: [],
   running: false,
   focus: null,
   expanded: false,
-  active: [],
+  brainView: 'all',
   issues: new Map(),
   newIssues: new Set(),
   anomCount: 0,
@@ -42,8 +44,9 @@ function h(tag, attrs = {}, ...children) {
   for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c instanceof Node ? c : String(c));
   return el;
 }
-const icon = (id) => {
+const svgUse = (id, cls) => {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  if (cls) svg.setAttribute('class', cls);
   const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
   use.setAttribute('href', `#${id}`);
   svg.append(use);
@@ -56,58 +59,132 @@ const sevShape = (sev) => {
   svg.innerHTML = SEV_SHAPE[sev]; // static, author-controlled markup
   return svg;
 };
+const agentOf = (id) => state.roster.get(id) || { id, code: '?', label: id, color: '#9ba6b1' };
 const agentChip = (id) => {
-  const p = state.personas.get(id);
-  return h('span', { class: 'chip-agent', style: `--agent:${p ? p.color : '#999'}`, title: p ? p.label : id }, p ? p.code : '?');
+  const a = agentOf(id);
+  return h('span', { class: 'chip-agent', style: `--agent:${a.color}`, title: a.label }, a.code);
 };
+const infoBtn = (text) => h('button', { class: 'info', type: 'button', 'data-tip': text, 'aria-label': 'Bilgi' }, svgUse('i-info'));
 const fmtClock = (ms) => {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
+// ---------- tooltips (one floating element for every (i) button) ----------
+const tip = $('tip');
+let tipOwner = null;
+function showTip(btn) {
+  tipOwner = btn;
+  tip.textContent = btn.dataset.tip;
+  tip.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  btn.setAttribute('aria-describedby', 'tip');
+  const r = btn.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  let left = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), window.innerWidth - tw - 8);
+  let top = r.bottom + 8;
+  if (top + th > window.innerHeight - 8) top = r.top - th - 8;
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+function hideTip() {
+  if (tipOwner) {
+    tipOwner.setAttribute('aria-expanded', 'false');
+    tipOwner.removeAttribute('aria-describedby');
+  }
+  tipOwner = null;
+  tip.hidden = true;
+}
+document.addEventListener('mouseover', (e) => {
+  const b = e.target.closest('.info');
+  if (b) showTip(b);
+  else if (tipOwner && !e.target.closest('.tip')) hideTip();
+});
+document.addEventListener('focusin', (e) => {
+  const b = e.target.closest('.info');
+  if (b) showTip(b);
+});
+document.addEventListener('focusout', (e) => {
+  if (e.target.closest('.info')) hideTip();
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.info');
+  if (b) {
+    e.preventDefault();
+    if (tipOwner === b) hideTip();
+    else showTip(b);
+  }
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && hideTip());
+window.addEventListener('scroll', hideTip, { passive: true });
+
 // ---------- setup form ----------
 const urlInput = $('url');
 const modeValue = () => document.querySelector('input[name=mode]:checked').value;
-const selectedPersonas = () => [...document.querySelectorAll('#personaPicker input:checked')].map((i) => i.value);
+const totalAgents = () => Object.values(state.counts).reduce((s, n) => s + n, 0);
+const rosterList = () => state.config.personas.flatMap((p) => Array.from({ length: state.counts[p.id] || 0 }, () => p.id));
 
 function renderPersonaPicker() {
-  const box = $('personaPicker');
-  box.replaceChildren(
-    ...state.config.personas.map((p) =>
-      h(
-        'label',
-        { class: 'persona', style: `--agent:${p.color}` },
-        h('input', { type: 'checkbox', value: p.id, checked: true }),
-        h('span', { class: 'agent-code' }, p.code),
-        h('span', {}, h('b', {}, p.label), h('small', {}, p.summary)),
-      ),
-    ),
+  const { maxAgents, maxPerPersona } = state.config.limits;
+  const total = totalAgents();
+  $('swarmCount').textContent = `${total} / ${maxAgents}`;
+  $('swarmCount').classList.toggle('full', total >= maxAgents);
+  $('personaPicker').replaceChildren(
+    ...state.config.personas.map((p) => {
+      const n = state.counts[p.id] || 0;
+      const set = (delta) => {
+        state.counts[p.id] = Math.min(maxPerPersona, Math.max(0, n + delta));
+        renderPersonaPicker();
+      };
+      return h(
+        'div',
+        { class: `prow${n ? ' on' : ''}` },
+        h('span', { class: 'pname' }, p.label),
+        infoBtn(`${p.summary}\nEkran: ${p.viewport.width}×${p.viewport.height}`),
+        h(
+          'span',
+          { class: 'stepper' },
+          h('button', { type: 'button', 'aria-label': `${p.label} azalt`, disabled: n === 0 || state.running, onclick: () => set(-1) }, '−'),
+          h('output', { 'aria-live': 'polite' }, String(n)),
+          h('button', { type: 'button', 'aria-label': `${p.label} artır`, disabled: n >= maxPerPersona || total >= maxAgents || state.running, onclick: () => set(1) }, '+'),
+        ),
+      );
+    }),
   );
 }
 
-async function refreshLiveGuard() {
+async function refreshTargetUi() {
   let local = true;
+  const target = urlInput.value.trim();
   try {
-    const res = await fetch(`/api/check-url?url=${encodeURIComponent(urlInput.value.trim())}`);
+    const res = await fetch(`/api/check-url?url=${encodeURIComponent(target)}`);
     local = (await res.json()).data.local;
   } catch {
     local = true;
   }
   $('liveConfirm').hidden = local || modeValue() === 'safe';
+  let isDemo = false;
+  try {
+    isDemo = new URL(target).origin === new URL(state.config.demoUrl).origin;
+  } catch {
+    isDemo = false;
+  }
+  $('resetRow').hidden = !isDemo;
 }
-urlInput.addEventListener('input', refreshLiveGuard);
-document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', refreshLiveGuard));
+urlInput.addEventListener('input', refreshTargetUi);
+document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', refreshTargetUi));
 document.querySelectorAll('.link-btn').forEach((b) =>
   b.addEventListener('click', () => {
     urlInput.value = b.dataset.url;
     if (b.dataset.mode) document.querySelector(`input[name=mode][value=${b.dataset.mode}]`).checked = true;
-    refreshLiveGuard();
+    refreshTargetUi();
   }),
 );
 
 $('start').addEventListener('click', async () => {
   $('formError').textContent = '';
-  const personas = selectedPersonas();
+  const personas = rosterList();
   if (!personas.length) {
     $('formError').textContent = 'En az bir ajan seçin.';
     return;
@@ -123,19 +200,21 @@ $('start').addEventListener('click', async () => {
     confirmLive: $('confirmLive').checked,
     personas,
     credentials: email || password ? { email, password } : undefined,
+    resetDemo: $('resetDemo').checked,
+    ai: $('aiToggle').checked,
   };
   $('start').disabled = true;
   try {
     const res = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const json = await res.json();
     if (!json.success) throw new Error(json.error);
-    $('seed').placeholder = `son seed ${json.data.seed}`;
+    $('seed').placeholder = `son: ${json.data.seed}`;
   } catch (err) {
     $('formError').textContent = err.message;
     $('start').disabled = false;
   }
 });
-$('stop').addEventListener('click', () => fetch('/api/stop', { method: 'POST' }));
+$('stop').addEventListener('click', () => fetch('/api/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }));
 
 document.querySelectorAll('.tabs button').forEach((b) =>
   b.addEventListener('click', () => {
@@ -151,48 +230,43 @@ function setRunning(running) {
   document.querySelectorAll('.setup input, .setup select, .link-btn').forEach((el) => {
     el.disabled = running;
   });
+  if (!state.config.ai) $('aiToggle').disabled = true;
+  renderPersonaPicker();
 }
-
-function setPhase(phase) {
+function setPhase(phase, message) {
   $('runState').dataset.phase = phase;
-  $('stateLabel').textContent = PHASE_LABEL[phase] || phase;
+  $('stateLabel').textContent = phase === 'finishing' && message ? message : PHASE_LABEL[phase] || phase;
 }
 
 // ---------- swarm tiles ----------
 const tiles = new Map();
+const streamUrl = (id) => `/api/stream/${encodeURIComponent(id)}?fps=${id === state.focus ? FPS_FOCUS : FPS_OTHER}&t=${Date.now()}`;
 
-function streamUrl(id) {
-  return `/api/stream/${id}?fps=${id === state.focus ? FPS_FOCUS : FPS_OTHER}&t=${Date.now()}`;
-}
-
-function buildTiles(ids) {
+function buildTiles(list, idle = false) {
   const box = $('tiles');
   tiles.clear();
   box.replaceChildren();
-  box.dataset.count = String(ids.length);
-  for (const id of ids) {
-    const p = state.personas.get(id);
-    const img = h('img', { alt: `${p.label} ajanının canlı görüntüsü`, decoding: 'async' });
-    const now = h('span', { class: 'now' }, 'Hazırlanıyor');
+  box.dataset.count = String(list.length);
+  box.classList.remove('focused');
+  for (const a of list) {
+    const img = h('img', { alt: `${a.label} canlı görüntüsü`, decoding: 'async' });
+    const now = h('span', { class: 'now' }, idle ? 'Bekliyor' : 'Hazırlanıyor');
     const meta = h('span', { class: 'meta' });
-    const vp = h('span', { class: 'vp' }, `${p.viewport.width}×${p.viewport.height}`);
-    const focusBtn = h('button', { class: 'focus-btn', type: 'button', title: 'Büyüt', 'aria-label': `${p.label} görünümünü büyüt` }, icon('i-expand'));
+    const vp = h('span', { class: 'vp' }, `${a.viewport.width}×${a.viewport.height}`);
+    const focusBtn = h('button', { class: 'focus-btn', type: 'button', title: 'Büyüt', 'aria-label': `${a.label} görünümünü büyüt` }, svgUse('i-expand'));
     const tile = h(
       'article',
-      { class: 'tile', style: `--agent:${p.color}`, 'data-agent': id },
-      h('div', { class: 'tile-head' }, h('span', { class: 'agent-code' }, p.code), h('span', { class: 'name' }, p.label), vp, focusBtn),
-      h('div', { class: 'screen' }, img),
+      { class: 'tile', style: `--agent:${a.color}`, 'data-agent': a.id },
+      h('div', { class: 'tile-head' }, h('span', { class: 'agent-code' }, a.code), h('span', { class: 'name' }, a.label), vp, focusBtn),
+      h('div', { class: 'screen' }, idle ? h('p', { class: 'idle-msg' }, 'Başlatınca bu sekme canlı akar.') : img),
       h('div', { class: 'tile-foot' }, now, meta),
     );
     tile.addEventListener('click', (e) => {
-      if (e.target.closest('.focus-btn')) {
-        state.expanded = !(state.expanded && state.focus === id);
-      }
-      setFocus(id);
+      if (e.target.closest('.focus-btn')) state.expanded = !(state.expanded && state.focus === a.id);
+      setFocus(a.id);
     });
     box.append(tile);
-    tiles.set(id, { tile, img, now, meta, vp });
-    meta.replaceChildren(h('b', {}, '0'), ' hamle · ', h('b', {}, '0'), ' sorun');
+    tiles.set(a.id, { tile, img, now, meta, vp });
   }
 }
 
@@ -204,17 +278,21 @@ function setFocus(id) {
     if ((tid === id || tid === prev) && state.running) t.img.src = streamUrl(tid);
   }
   $('tiles').classList.toggle('focused', state.expanded && tiles.size > 1);
-  brain.setFocus(id);
-  const p = state.personas.get(id);
-  $('brainSub').textContent = p ? `${p.code} ${p.label}: gördüğü bölgeler, tarttığı hamleler ve sonuçları.` : '';
   if (state.running) fetch('/api/focus', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent: id }) });
 }
 
-function startStreams() {
-  for (const [id, t] of tiles) t.img.src = streamUrl(id);
+function buildBrainTabs() {
+  const box = $('brainTabs');
+  const tab = (id, label, color) =>
+    h('button', { type: 'button', role: 'tab', 'aria-selected': String(state.brainView === id), style: color ? `--agent:${color}` : null, onclick: () => setBrainView(id) }, color ? h('span', { class: 'dot' }) : null, label);
+  box.replaceChildren(tab('all', 'Tümü'), ...state.order.map((id) => tab(id, agentOf(id).code, agentOf(id).color)));
+}
+function setBrainView(v) {
+  state.brainView = v;
+  brain.setView(v);
+  buildBrainTabs();
 }
 
-// ---------- brain ----------
 let brain;
 
 // ---------- score & lists ----------
@@ -222,16 +300,14 @@ function renderScore(s) {
   $('score').textContent = s.score;
   $('grade').textContent = s.grade && s.grade.grade ? `${s.grade.grade} · ${s.grade.label}` : '—';
   state.history.push(s.score);
-  if (state.history.length > 120) state.history.shift();
+  if (state.history.length > 160) state.history.shift();
   const n = state.history.length;
-  const pts = state.history.map((v, i) => `${n === 1 ? 0 : (i / (n - 1)) * 160},${38 - (v / 100) * 34}`).join(' ');
-  $('historyLine').setAttribute('points', n === 1 ? `0,${38 - (s.score / 100) * 34} 160,${38 - (s.score / 100) * 34}` : pts);
+  const y = (v) => 44 - (v / 100) * 40;
+  const pts = n === 1 ? `0,${y(s.score)} 160,${y(s.score)}` : state.history.map((v, i) => `${(i / (n - 1)) * 160},${y(v)}`).join(' ');
+  $('historyLine').setAttribute('points', pts);
   $('history').style.color = s.score >= 75 ? 'var(--signal)' : s.score >= 45 ? 'var(--med)' : 'var(--crit)';
-
   const sev = $('sevCounts');
-  if (!sev.children.length) {
-    sev.replaceChildren(...SEV_ORDER.map((k) => h('li', { 'data-sev': k }, h('b', {}, '0'), h('span', { class: `sev ${k}` }, sevShape(k), SEV_LABEL[k]))));
-  }
+  if (!sev.children.length) sev.replaceChildren(...SEV_ORDER.map((k) => h('li', { 'data-sev': k }, h('b', {}, '0'), h('span', { class: `sev ${k}` }, sevShape(k), SEV_LABEL[k]))));
   for (const li of sev.children) {
     const v = String(s.counts[li.dataset.sev]);
     const b = li.querySelector('b');
@@ -245,7 +321,7 @@ function renderScore(s) {
   if (s.categories) {
     const cats = $('cats');
     if (cats.children.length !== s.categories.length) {
-      cats.replaceChildren(...s.categories.map((c) => h('li', { 'data-cat': c.id }, h('span', {}, c.label), h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', style: 'display:block' })), h('span', { class: 'num' }))));
+      cats.replaceChildren(...s.categories.map((c) => h('li', {}, h('span', {}, c.label), h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill', style: 'display:block' })), h('span', { class: 'num' }))));
     }
     s.categories.forEach((c, i) => {
       const li = cats.children[i];
@@ -294,7 +370,7 @@ function issueNode(issue) {
       h('p', {}, issue.meaning),
       h('h4', {}, 'Nasıl düzeltilir'),
       h('p', { class: 'fix' }, issue.fix),
-      h('h4', {}, 'Nerede ve ne zaman'),
+      h('h4', {}, 'Nerede'),
       h('p', {}, `${issue.id} · ${issue.agentLabel || ''} · tetik: ${issue.trigger}`),
       h('pre', {}, [issue.url, ...(issue.evidence || [])].filter(Boolean).join('\n')),
     ),
@@ -355,22 +431,49 @@ function onAnomaly(a) {
   while (panel.children.length > 200) panel.lastChild.remove();
 }
 
+// ---------- AI ----------
+function renderAiPlan(plan) {
+  $('aiPanel').hidden = false;
+  $('aiModel').textContent = plan.model || '';
+  $('aiSummary').textContent = plan.summary || '';
+  $('aiSteps').replaceChildren(
+    ...plan.steps.map((s) =>
+      h('li', { class: s.status }, h('span', { class: 'mono' }, s.by || s.persona), h('span', {}, `${s.kind}${s.target ? ` · “${s.target}”` : ''}`), h('span', { class: 'why' }, s.reason)),
+    ),
+  );
+}
+function renderAiReport(ai) {
+  if (!ai || !ai.enabled) return;
+  $('aiPanel').hidden = false;
+  if (ai.plan) renderAiPlan(ai.plan);
+  const box = $('aiFixes');
+  const parts = [];
+  if (ai.summary) {
+    $('aiSummary').textContent = ai.summary.headline;
+    $('aiModel').textContent = ai.summary.model || $('aiModel').textContent;
+    parts.push(...ai.summary.fixes.map((f) => h('p', { class: 'ai-fix' }, h('b', {}, `${f.priority}. ${f.title}`), h('span', {}, f.detail))));
+  }
+  if (ai.errors && ai.errors.length) parts.push(h('p', { class: 'note' }, `AI uyarısı: ${ai.errors.join(' · ')}`));
+  box.replaceChildren(...parts);
+}
+
 function showReport(r) {
   setRunning(false);
   setPhase('done');
   const base = `/reports/${encodeURIComponent(r.reportName)}`;
-  $('reportText').textContent = `${r.issues.length} sorun · ${r.stats.actions} hamle · ${(r.durationMs / 1000).toFixed(0)} sn · seed ${r.seed}`;
-  const link = (href, label, ic, cls, download) => h('a', { class: cls, href, target: '_blank', rel: 'noopener', download }, icon(ic), label);
+  $('reportText').textContent = `${r.issues.length} sorun · ${r.stats.actions} hamle · seed ${r.seed}`;
+  const link = (href, label, ic, cls, download) => h('a', { class: cls, href, target: '_blank', rel: 'noopener', download }, svgUse(ic), label);
   $('reportLinks').replaceChildren(
     link(`${base}/report.html`, 'HTML rapor', 'i-file', 'main'),
     link(`${base}/stampede.spec.ts`, 'Playwright testleri', 'i-code', null, 'stampede.spec.ts'),
-    link(`${base}/report.md`, 'Markdown', 'i-file'),
+    link(`${base}/report.md`, 'MD', 'i-file'),
     link(`${base}/report.json`, 'JSON', 'i-file'),
   );
   $('reportPanel').hidden = false;
   for (const i of r.issues) state.issues.set(i.fingerprint, i);
   queueIssues();
   renderScore(r);
+  renderAiReport(r.ai);
 }
 
 function resetBoard() {
@@ -378,13 +481,18 @@ function resetBoard() {
   state.anomCount = 0;
   state.history = [];
   state.open = null;
-  $('panel-issues').replaceChildren(h('p', { class: 'empty' }, 'Bulunan sorunlar burada, önem sırasına göre listelenir.'));
+  $('panel-issues').replaceChildren(h('p', { class: 'empty' }, 'Sorunlar önem sırasına göre burada listelenir.'));
   $('panel-feed').replaceChildren();
   $('panel-anoms').replaceChildren();
   $('tIssues').textContent = '0';
   $('tAnoms').textContent = '0';
   $('reportPanel').hidden = true;
+  $('aiPanel').hidden = true;
+  $('aiSteps').replaceChildren();
+  $('aiFixes').replaceChildren();
+  $('aiSummary').textContent = '';
   $('formError').textContent = '';
+  $('brainCaption').textContent = '';
   brain.reset();
 }
 
@@ -392,7 +500,7 @@ function resetBoard() {
 function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('error', () => {
-    if (!state.running) $('stateLabel').textContent = 'Bağlantı yok, yeniden deneniyor';
+    if (!state.running) $('stateLabel').textContent = 'Bağlantı yok';
   });
   es.addEventListener('hello', (e) => {
     const d = JSON.parse(e.data);
@@ -406,29 +514,34 @@ function connect() {
   es.addEventListener('started', (e) => {
     const d = JSON.parse(e.data);
     resetBoard();
+    state.roster = new Map(d.personas.map((a) => [a.id, a]));
+    state.order = d.personas.map((a) => a.id);
     setRunning(true);
-    state.active = d.personas.map((p) => p.id);
-    buildTiles(state.active);
+    buildTiles(d.personas);
     state.expanded = false;
-    setFocus(state.active[0]);
-    startStreams();
-    const who = d.identity.generated ? `otomatik test kimliği ${d.identity.email}` : `test kimliği ${d.identity.email}`;
-    $('swarmSub').textContent = `${d.mode.label} · ${state.active.length} ajan · seed ${d.config.seed} · ${who}`;
+    setFocus(state.order[0]);
+    for (const [id, t] of tiles) t.img.src = streamUrl(id);
+    brain.setAgents(state.order);
+    setBrainView('all');
   });
-  es.addEventListener('status', (e) => setPhase(JSON.parse(e.data).phase));
+  es.addEventListener('status', (e) => {
+    const d = JSON.parse(e.data);
+    setPhase(d.phase, d.message);
+  });
   es.addEventListener('stats', (e) => renderStats(JSON.parse(e.data)));
   es.addEventListener('decision', (e) => {
     const d = JSON.parse(e.data);
     brain.decision(d.agent, d);
-    if (d.agent === state.focus) {
+    if (state.brainView === 'all' || state.brainView === d.agent) {
       const chosen = d.candidates.find((c) => c.chosen);
-      $('brainCaption').textContent = chosen ? `#${d.seq} · ${d.considered} hamle tartıldı · seçilen: ${chosen.label} (%${Math.round(chosen.p * 100)})` : '';
+      if (chosen) $('brainCaption').textContent = `${agentOf(d.agent).code} #${d.seq} · ${d.considered} aday · seçilen: ${chosen.label} (%${Math.round(chosen.p * 100)})${chosen.ai ? ' · AI planı' : ''}`;
     }
   });
   es.addEventListener('outcome', (e) => {
     const d = JSON.parse(e.data);
     brain.outcome(d.agent, d);
   });
+  es.addEventListener('aiplan', (e) => renderAiPlan(JSON.parse(e.data)));
   es.addEventListener('action', (e) => onAction(JSON.parse(e.data)));
   es.addEventListener('issue', (e) => onIssue(JSON.parse(e.data)));
   es.addEventListener('anomaly', (e) => onAnomaly(JSON.parse(e.data)));
@@ -443,21 +556,34 @@ function connect() {
 async function boot() {
   const res = await fetch('/api/config');
   state.config = (await res.json()).data;
-  for (const p of state.config.personas) state.personas.set(p.id, p);
+  for (const id of state.config.defaultSwarm) state.counts[id] = (state.counts[id] || 0) + 1;
   const demo = state.config.demoUrl;
   document.querySelectorAll('.link-btn[data-url*="localhost:7500"]').forEach((b) => {
     b.dataset.url = b.dataset.url.replace('http://localhost:7500', demo);
   });
   if (urlInput.value.startsWith('http://localhost:7500')) urlInput.value = `${demo}/`;
+  const badge = $('aiBadge');
+  badge.hidden = false;
+  badge.classList.toggle('off', !state.config.ai);
+  $('aiBadgeText').textContent = state.config.ai ? 'AI hazır' : 'AI kapalı';
+  if (!state.config.ai) {
+    $('aiToggle').checked = false;
+    $('aiToggle').disabled = true;
+    $('aiRow').classList.add('disabled');
+    $('aiTip').dataset.tip = 'AI kapalı: proje klasöründeki .env dosyasına GEMINI_API_KEY=... ekleyip npm start ile yeniden başlatın. AI olmadan her şey lokal çalışır.';
+  }
   renderPersonaPicker();
-  brain = createBrain($('brain'), { zoneLabels: state.config.zones, colorOf: (id) => (state.personas.get(id) || {}).color || '#9ba6b1' });
-  buildTiles(state.config.personas.map((p) => p.id));
-  for (const t of tiles.values()) t.tile.querySelector('.screen').replaceChildren(h('p', { class: 'idle-msg' }, 'Başlatınca bu sekmenin canlı görüntüsü burada akar.'));
-  setFocus(state.config.personas[0].id);
+  brain = createBrain($('brain'), { zoneLabels: state.config.zones, agentInfo: (id) => agentOf(id) });
+  const preview = state.config.defaultSwarm.map((pid, i) => {
+    const p = state.config.personas.find((x) => x.id === pid);
+    return { id: `preview-${i}`, code: `A${i + 1}`, label: p.label, color: ['#74aef5', '#4eccd3', '#ee8dbd', '#c2a7f4'][i], viewport: p.viewport };
+  });
+  for (const a of preview) state.roster.set(a.id, a);
+  buildTiles(preview, true);
   renderScore({ score: 100, grade: null, counts: { critical: 0, high: 0, medium: 0, low: 0 }, categories: state.config.categories.map((c) => ({ ...c, score: 100 })) });
   state.history = [];
   connect();
-  refreshLiveGuard();
+  refreshTargetUi();
 }
 
 boot();

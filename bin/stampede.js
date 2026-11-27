@@ -8,7 +8,8 @@ import { StampedeSession } from '../src/engine/session.js';
 import { SEVERITY_ORDER, SEVERITY_LABEL } from '../src/engine/issues.js';
 import { writeReport } from '../src/report/index.js';
 import { REPORTS_DIR } from '../src/server/index.js';
-import { PERSONA_ORDER } from '../src/engine/personas.js';
+import { DEFAULT_SWARM, PERSONA_ORDER } from '../src/engine/personas.js';
+import { loadEnv } from '../src/util/env.js';
 
 const C = { red: '\x1b[31m', yellow: '\x1b[33m', blue: '\x1b[36m', magenta: '\x1b[35m', dim: '\x1b[2m', bold: '\x1b[1m', reset: '\x1b[0m', orange: '\x1b[38;5;208m' };
 const SEV_COLOR = { critical: C.red, high: C.orange, medium: C.yellow, low: C.blue };
@@ -21,8 +22,10 @@ Kullanım:
 
 Seçenekler:
   --mode <safe|chaos|stress>  Varsayılan: safe (canlı siteler için güvenli)
-  --personas <liste|all>      rage,keyboard,mobile,snoop (varsayılan: rage). all = dört ajan
+  --personas <liste|all|every> Virgülle, tekrar serbest: rage,rage,snoop. Türler: rage, keyboard, mobile,
+                              snoop, abandoner, slow, bot (varsayılan: rage). all = ilk dört, every = yedisi
   --email / --password        Giriş/kayıt formları için test kimliği (yoksa otomatik üretilir)
+  --no-ai                     .env'de GEMINI_API_KEY olsa bile AI planlayıcı/incelemeyi kapat
   --duration <sn>             Çalışma süresi, varsayılan 60
   --seed <sayı>               Aynı senaryoyu tekrar oynatmak için
   --headed                    Tarayıcı penceresini göster
@@ -48,9 +51,10 @@ export function parseArgs(argv) {
     if (a === '--mode') opts.mode = next();
     else if (a === '--personas') {
       const v = next();
-      opts.personas = v === 'all' ? [...PERSONA_ORDER] : v.split(',').map((x) => x.trim()).filter(Boolean);
+      opts.personas = v === 'all' ? [...DEFAULT_SWARM] : v === 'every' ? [...PERSONA_ORDER] : v.split(',').map((x) => x.trim()).filter(Boolean);
     } else if (a === '--email') opts.email = next();
     else if (a === '--password') opts.password = next();
+    else if (a === '--no-ai') opts.ai = false;
     else if (a === '--duration') opts.durationSec = Number(next());
     else if (a === '--seed') opts.seed = Number(next());
     else if (a === '--headed') opts.headed = true;
@@ -64,6 +68,7 @@ export function parseArgs(argv) {
 }
 
 async function main() {
+  loadEnv();
   const argv = process.argv.slice(2);
   if (!argv.length || argv[0] === '--help' || argv[0] === '-h' || argv[0] !== 'run' || !argv[1]) {
     process.stdout.write(HELP);
@@ -71,8 +76,8 @@ async function main() {
   }
   const opts = parseArgs(argv);
   const credentials = opts.email || opts.password ? { email: opts.email, password: opts.password } : undefined;
-  const session = new StampedeSession({ url: opts.url, mode: opts.mode, durationSec: opts.durationSec, seed: opts.seed, headed: opts.headed, confirmLive: opts.confirmLive, personas: opts.personas, credentials });
-  const agents = session.personas.map((p) => `${p.code} ${p.label}`).join(', ');
+  const session = new StampedeSession({ url: opts.url, mode: opts.mode, durationSec: opts.durationSec, seed: opts.seed, headed: opts.headed, confirmLive: opts.confirmLive, personas: opts.personas, credentials, ai: opts.ai !== false });
+  const agents = session.roster.map((r) => `${r.code} ${r.label}`).join(', ');
   process.stdout.write(`\n${C.bold}Stampede${C.reset} → ${opts.url}  ${C.dim}(${session.mode.label}, ${session.config.durationSec} sn, seed ${session.config.seed})${C.reset}\n${C.dim}Ajanlar: ${agents}${C.reset}\n\n`);
   process.on('SIGINT', () => session.stop());
   session.on('issue', ({ issue, isNew }) => {

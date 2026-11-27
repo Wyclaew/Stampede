@@ -13,12 +13,11 @@
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></symbol>
     <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></symbol>
-    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 1.8 13 3.6v4c0 3.2-2.1 5.6-5 6.6-2.9-1-5-3.4-5-6.6v-4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
-    <symbol id="i-chaos" viewBox="0 0 16 16"><path d="M1.5 9.5 4.5 4l3 8 3-8 4 5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="i-stress" viewBox="0 0 16 16"><path d="M8 2 14.5 13.5h-13z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.6v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
     <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.8h5.3L12.5 5v9.2h-8.5z M9 1.8V5.3h3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
     <symbol id="i-code" viewBox="0 0 16 16"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-expand" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.2v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".95" fill="currentColor"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 1.5 9.4 6.6 14.5 8 9.4 9.4 8 14.5 6.6 9.4 1.5 8 6.6 6.6z" fill="currentColor"/></symbol>
   </svg>
 
   <header class="bar">
@@ -26,47 +25,57 @@
       <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 5v15l4.2-3.7 2.7 6.2 2.7-1.2-2.7-6.1H19z" fill="var(--signal)"/><path d="M17 3v9.5l2.7-2.4 1.8 4 1.8-.8-1.8-3.9H26z" fill="#74aef5"/></svg>
       <span class="word">Stampede</span>
     </a>
-    <p class="tagline">Uygulamanıza aynı anda dört farklı sabırsız kullanıcı saldırır. Kırılan her şey, tekrar üretilebilir bir teste dönüşür.</p>
-    <div class="run-state" id="runState" data-phase="idle">
-      <span class="state-label" id="stateLabel">Hazır</span>
-      <span class="clock mono" id="clock">00:00</span>
+    <button class="info" type="button" data-tip="Stampede uygulamanıza aynı anda birden fazla sabırsız kullanıcı gönderir: her biri ayrı bir sekmede kendi tarzında saldırır. Kırılan her şey ekran görüntülü bir rapora ve çalıştırılabilir bir Playwright testine dönüşür. Kaynak kod gerekmez."><svg><use href="#i-info"/></svg></button>
+    <div class="bar-right">
+      <span class="ai-badge" id="aiBadge" hidden><svg><use href="#i-spark"/></svg><span id="aiBadgeText">AI</span></span>
+      <div class="run-state" id="runState" data-phase="idle">
+        <span class="state-label" id="stateLabel">Hazır</span>
+        <span class="clock mono" id="clock">00:00</span>
+      </div>
     </div>
   </header>
 
   <main class="layout">
-    <section class="setup panel" aria-labelledby="setup-title">
-      <h2 id="setup-title">Görev</h2>
-      <label class="field">
-        <span class="label">Hedef adres</span>
+    <section class="setup panel" aria-label="Görev ayarları">
+      <div class="field">
+        <div class="label-row"><label class="label" for="url">Hedef adres</label></div>
         <input id="url" class="mono" type="url" value="http://localhost:7500/" spellcheck="false" autocomplete="off">
-      </label>
-      <div class="quick" role="group" aria-label="Hazır hedefler">
-        <button type="button" class="link-btn" data-url="http://localhost:7500/">Demo · hatalı</button>
-        <button type="button" class="link-btn" data-url="http://localhost:7500/?fixed=1">Demo · düzeltilmiş</button>
-        <button type="button" class="link-btn" data-url="https://biyom.co/" data-mode="safe">biyom.co</button>
+        <div class="quick" role="group" aria-label="Hazır hedefler">
+          <button type="button" class="link-btn" data-url="http://localhost:7500/">Demo · hatalı</button>
+          <button type="button" class="link-btn" data-url="http://localhost:7500/?fixed=1">Demo · düzgün</button>
+          <button type="button" class="link-btn" data-url="https://biyom.co/" data-mode="safe">biyom.co</button>
+        </div>
       </div>
 
       <fieldset class="group">
-        <legend class="label">Mod</legend>
-        <div class="modes">
-          <label class="mode"><input type="radio" name="mode" value="safe"><svg><use href="#i-shield"/></svg><span><b>Güvenli keşif</b><small>Canlı site. Yazma istekleri engellenir.</small></span></label>
-          <label class="mode"><input type="radio" name="mode" value="chaos" checked><svg><use href="#i-chaos"/></svg><span><b>Tam kaos</b><small>Lokal ve staging. Gerçek gönderimler.</small></span></label>
-          <label class="mode"><input type="radio" name="mode" value="stress"><svg><use href="#i-stress"/></svg><span><b>Stres</b><small>Sadece lokal. CPU, ağ, API bozma.</small></span></label>
+        <div class="label-row">
+          <legend class="label">Mod</legend>
+          <button class="info" type="button" data-tip="Güvenli: canlı siteler için. Tüm yazma istekleri (POST/PUT/DELETE) ağda engellenir, ödeme/silme/çıkış butonlarına dokunulmaz, formlar gönderilmez.&#10;Kaos: lokal ve staging için. Gerçek gönderimler, giriş/kayıt, bağlantı kesme, ikinci sekme.&#10;Stres: sadece lokal. CPU 4× yavaş, yavaş 3G, API yanıtlarını yolda bozma, sil butonları dahil."><svg><use href="#i-info"/></svg></button>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Mod">
+          <label><input type="radio" name="mode" value="safe"><span>Güvenli</span></label>
+          <label><input type="radio" name="mode" value="chaos" checked><span>Kaos</span></label>
+          <label class="danger-opt"><input type="radio" name="mode" value="stress"><span>Stres</span></label>
         </div>
       </fieldset>
 
       <fieldset class="group">
-        <legend class="label">Sürü</legend>
+        <div class="label-row">
+          <legend class="label">Sürü</legend>
+          <span class="count-pill mono" id="swarmCount">4 / 8</span>
+        </div>
         <div class="personas" id="personaPicker"></div>
       </fieldset>
 
       <fieldset class="group">
-        <legend class="label">Test kimliği <span class="hint">giriş/kayıt formlarına yazılır</span></legend>
-        <div class="row2">
-          <input id="email" type="email" autocomplete="off" placeholder="otomatik üretilir" aria-label="Test e-postası">
-          <input id="password" type="password" autocomplete="new-password" placeholder="otomatik" aria-label="Test şifresi">
+        <div class="label-row">
+          <legend class="label">Test kimliği</legend>
+          <button class="info" type="button" data-tip="Ajanlar giriş ve kayıt formlarını bu kimlikle doldurur: önce kayıt olur, sonra aynı kimlikle giriş yapar. Boş bırakırsanız .env'deki STAMPEDE_EMAIL/STAMPEDE_PASSWORD, o da yoksa her koşuya özel otomatik bir hesap kullanılır. Google, Apple, GitHub ve '… ile giriş' butonlarına hiçbir modda basılmaz. Şifre raporlarda maskelenir."><svg><use href="#i-info"/></svg></button>
         </div>
-        <p class="note">Google, Apple ve diğer “… ile giriş” butonlarına hiç basılmaz. Şifre raporlarda maskelenir.</p>
+        <div class="row2">
+          <input id="email" type="email" autocomplete="off" placeholder="e-posta (otomatik)" aria-label="Test e-postası">
+          <input id="password" type="password" autocomplete="new-password" placeholder="şifre (otomatik)" aria-label="Test şifresi">
+        </div>
       </fieldset>
 
       <div class="row2">
@@ -75,53 +84,66 @@
         </label>
         <label class="field"><span class="label">Seed</span><input id="seed" class="mono" type="number" inputmode="numeric" placeholder="rastgele"></label>
       </div>
-      <label class="check"><input id="headed" type="checkbox"><span>Tarayıcı pencerelerini de göster</span></label>
+
+      <div class="toggles">
+        <label class="switch"><input id="headed" type="checkbox"><span class="track"></span><span>Pencereleri göster</span>
+          <button class="info" type="button" data-tip="Her ajan için gerçek bir Chrome penceresi açar ve ekranı ızgara halinde paylaştırır. Başlarken farenizi ekranın üst kenarına taşırız; ajan imleçleri sizin farenizi dinlemez."><svg><use href="#i-info"/></svg></button></label>
+        <label class="switch" id="resetRow"><input id="resetDemo" type="checkbox" checked><span class="track"></span><span>Demoyu sıfırla</span>
+          <button class="info" type="button" data-tip="Demo mağazasında önceki koşudan kalan siparişler, hesaplar ve sepet her başlatmada silinir. Sadece dahili demo için geçerlidir."><svg><use href="#i-info"/></svg></button></label>
+        <label class="switch" id="aiRow"><input id="aiToggle" type="checkbox" checked><span class="track"></span><span>AI (Gemini)</span>
+          <button class="info" type="button" id="aiTip" data-tip="Açıkken: koşu başında sayfa yapısından bir saldırı planı çıkarılır, sonunda ekran görüntüleri görsel kusurlar için incelenir ve tüm bulgular kök nedenlerine göre özetlenir. Sayfa özeti ve ekran görüntüleri Google Gemini'ye gönderilir."><svg><use href="#i-info"/></svg></button></label>
+      </div>
+
       <label class="consent" id="liveConfirm" hidden>
         <input id="confirmLive" type="checkbox">
-        <span>Bu canlı bir site ve seçili mod gerçek sipariş, form ve giriş isteği gönderebilir. <b>Sitenin sahibiyim, izin veriyorum.</b></span>
+        <span>Canlı site: bu mod gerçek sipariş, form ve giriş isteği gönderebilir. <b>Sitenin sahibiyim.</b></span>
       </label>
       <div class="actions">
-        <button id="start" class="primary" type="button"><svg><use href="#i-play"/></svg>Sürüyü başlat</button>
+        <button id="start" class="primary" type="button"><svg><use href="#i-play"/></svg>Başlat</button>
         <button id="stop" class="secondary" type="button" disabled><svg><use href="#i-stop"/></svg>Durdur</button>
       </div>
       <p id="formError" class="form-error" role="alert"></p>
     </section>
 
-    <section class="swarm" aria-labelledby="swarm-title">
-      <div class="section-head">
-        <h2 id="swarm-title">Sürü</h2>
-        <p class="sub" id="swarmSub">Ajan seçin ve başlatın. Her ajan ayrı bir sekmede kendi kullanıcı tipini oynar.</p>
-      </div>
+    <section class="swarm" aria-label="Sürü">
       <div class="tiles" id="tiles" data-count="0"></div>
 
       <article class="brain panel" aria-labelledby="brain-title">
-        <div class="section-head">
+        <div class="panel-head">
           <h2 id="brain-title">Karar grafiği</h2>
-          <p class="sub" id="brainSub">Seçili ajanın gördüğü bölgeler, tarttığı hamleler ve sonuçları.</p>
+          <button class="info" type="button" data-tip="Ajanların beyni. Solda hedef aldıkları sayfa bölgesi, ortada seçtikleri hamle ve olasılık dağılımı (çubuklar: en olası 6 aday), sağda sonuç. 'Tümü' tüm ajanları kendi renklerinde gösterir; bir ajana tıklayınca o ajanın tarttığı tüm adayları görürsünüz. AI işaretli hamleler Gemini planından gelir."><svg><use href="#i-info"/></svg></button>
+          <div class="brain-tabs" id="brainTabs" role="tablist"></div>
         </div>
-        <canvas id="brain" height="300" aria-label="Seçili ajanın karar grafiği"></canvas>
-        <p class="brain-caption mono" id="brainCaption">Henüz karar yok.</p>
+        <canvas id="brain" height="320" aria-label="Ajanların karar grafiği"></canvas>
+        <p class="brain-caption mono" id="brainCaption"></p>
       </article>
     </section>
 
-    <section class="findings" aria-labelledby="score-title">
+    <section class="findings" aria-label="Bulgular">
       <div class="panel score-panel">
-        <div class="score-head">
-          <h2 id="score-title">Dayanıklılık</h2>
-          <span class="grade" id="grade">—</span>
-        </div>
         <div class="score-row">
-          <b class="score mono" id="score">100</b>
-          <svg class="history" id="history" viewBox="0 0 160 40" preserveAspectRatio="none" aria-label="Skor geçmişi"><polyline id="historyLine" fill="none" stroke="currentColor" stroke-width="1.5" points="0,4 160,4"/></svg>
+          <div>
+            <div class="label-row"><span class="label">Dayanıklılık</span>
+              <button class="info" type="button" data-tip="100'den başlar; her farklı sorun önemine göre düşürür: Kritik −25, Yüksek −12, Orta −5, Düşük −2. Altındaki çubuklar kategori karnesidir; her kategori kendi sorunlarıyla 100'den düşer."><svg><use href="#i-info"/></svg></button></div>
+            <b class="score mono" id="score">100</b>
+            <span class="grade" id="grade">—</span>
+          </div>
+          <svg class="history" id="history" viewBox="0 0 160 48" preserveAspectRatio="none" aria-label="Skor geçmişi"><polyline id="historyLine" fill="none" stroke="currentColor" stroke-width="1.6" points="0,4 160,4"/></svg>
         </div>
         <ul class="sev-counts" id="sevCounts"></ul>
         <ul class="cats" id="cats"></ul>
         <dl class="stats mono" id="stats"></dl>
       </div>
 
+      <div class="panel ai-panel" id="aiPanel" hidden>
+        <div class="panel-head"><h2><svg class="spark"><use href="#i-spark"/></svg>AI</h2><span class="sub mono" id="aiModel"></span></div>
+        <p class="ai-summary" id="aiSummary"></p>
+        <ol class="ai-steps" id="aiSteps"></ol>
+        <div id="aiFixes"></div>
+      </div>
+
       <div class="panel report-panel" id="reportPanel" hidden>
-        <h2>Rapor</h2>
-        <p class="sub" id="reportText"></p>
+        <div class="panel-head"><h2>Rapor</h2><span class="sub" id="reportText"></span></div>
         <div class="report-links" id="reportLinks"></div>
       </div>
 
@@ -129,15 +151,16 @@
         <nav class="tabs" role="tablist">
           <button role="tab" aria-selected="true" data-tab="issues">Sorunlar <span class="count" id="tIssues">0</span></button>
           <button role="tab" aria-selected="false" data-tab="feed">Hamleler</button>
-          <button role="tab" aria-selected="false" data-tab="anoms">Ağ ve konsol <span class="count" id="tAnoms">0</span></button>
+          <button role="tab" aria-selected="false" data-tab="anoms">Ağ · konsol <span class="count" id="tAnoms">0</span></button>
         </nav>
-        <div class="list" id="panel-issues"><p class="empty">Bulunan sorunlar burada, önem sırasına göre listelenir.</p></div>
+        <div class="list" id="panel-issues"><p class="empty">Sorunlar önem sırasına göre burada listelenir.</p></div>
         <div class="list" id="panel-feed" hidden></div>
         <div class="list" id="panel-anoms" hidden></div>
       </div>
     </section>
   </main>
 
+  <div class="tip" id="tip" role="tooltip" hidden></div>
   <script src="/app.js" type="module"></script>
 </body>
 </html>

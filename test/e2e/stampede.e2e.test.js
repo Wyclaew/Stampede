@@ -28,6 +28,7 @@ after(async () => {
 });
 
 const resetDemo = () => fetch(`${demoUrl}/api/reset`, { method: 'POST' });
+const JSON_HEADERS = { 'content-type': 'application/json' };
 const types = (report) => new Set(report.issues.map((i) => i.type));
 
 test('the angry customer alone catches the double charge with a full repro', { timeout: 120000 }, async () => {
@@ -45,8 +46,13 @@ test('the angry customer alone catches the double charge with a full repro', { t
 
 test('the full swarm finds security, keyboard and mobile bugs and films them', { timeout: 150000 }, async () => {
   await resetDemo();
-  const report = await new StampedeSession({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 40, seed: 11, personas: ALL }).run();
+  const session = new StampedeSession({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 40, seed: 11, personas: ALL });
+  const auth = [];
+  session.on('anomaly', (a) => a.kind === 'auth' && auth.push(a.text));
+  const report = await session.run();
   const found = types(report);
+  assert.ok(demo.state.users.length >= 1, 'the auth autopilot should have created the test account');
+  assert.ok(auth.some((t) => /Hoş geldin/.test(t)), `login should succeed with the generated identity: ${auth.join(' | ')}`);
   for (const t of ['double-submit', 'data-leak']) assert.ok(found.has(t), `missing ${t}; got ${[...found].join(', ')}`);
   assert.ok(found.has('focus-invisible') || found.has('keyboard-unreachable'), `keyboard agent found nothing; got ${[...found].join(', ')}`);
   assert.ok(found.has('insecure-cookie') || demo.state.users.length === 0, 'a logged-in session cookie must be audited');
@@ -92,11 +98,16 @@ test('dashboard: SSE decisions, MJPEG live view and report serving', { timeout: 
   const port = await listenWithFallback(server, 0);
   const base = `http://localhost:${port}`;
   try {
-    const bad = await fetch(`${base}/api/run`, { method: 'POST', body: JSON.stringify({ url: 'https://biyom.co', mode: 'stress' }) });
+    const bad = await fetch(`${base}/api/run`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ url: 'https://biyom.co', mode: 'stress' }) });
     assert.equal(bad.status, 400);
+    // CSRF / DNS-rebinding guards
+    const plain = await fetch(`${base}/api/run`, { method: 'POST', body: JSON.stringify({ url: `${demoUrl}/` }) });
+    assert.equal(plain.status, 403, 'a text/plain POST (what a foreign page can send without preflight) must be refused');
+    const foreign = await fetch(`${base}/api/run`, { method: 'POST', headers: { ...JSON_HEADERS, origin: 'https://evil.example' }, body: JSON.stringify({ url: `${demoUrl}/` }) });
+    assert.equal(foreign.status, 403);
     const cfg = await (await fetch(`${base}/api/config`)).json();
     assert.equal(cfg.data.demoUrl, demoUrl);
-    assert.equal(cfg.data.personas.length, 4);
+    assert.equal(cfg.data.personas.length, 7);
     const font = await fetch(`${base}/vendor/fonts/schibsted-grotesk-latin-wght-normal.woff2`);
     assert.equal(font.headers.get('content-type'), 'font/woff2');
 
@@ -126,7 +137,7 @@ test('dashboard: SSE decisions, MJPEG live view and report serving', { timeout: 
       .catch(() => {});
 
     await new Promise((r) => setTimeout(r, 300));
-    const run = await fetch(`${base}/api/run`, { method: 'POST', body: JSON.stringify({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 12, seed: 5, personas: ['rage', 'mobile'] }) });
+    const run = await fetch(`${base}/api/run`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 12, seed: 5, personas: ['rage', 'mobile'] }) });
     assert.equal(run.status, 200);
 
     // MJPEG: the live view is a multipart stream of JPEG frames.
@@ -151,4 +162,19 @@ test('dashboard: SSE decisions, MJPEG live view and report serving', { timeout: 
   } finally {
     server.close();
   }
+});
+
+test('eight agents including the new personas run together without errors', { timeout: 120000 }, async () => {
+  await resetDemo();
+  const session = new StampedeSession({ url: `${demoUrl}/`, mode: 'chaos', durationSec: 30, seed: 9, personas: ['rage', 'rage', 'keyboard', 'mobile', 'snoop', 'abandoner', 'slow', 'bot'] });
+  const kinds = new Set();
+  const errors = [];
+  session.on('action', (a) => a.phase === 'done' && kinds.add(a.kind));
+  session.on('error', (e) => errors.push(e.message));
+  const report = await session.run();
+  assert.deepEqual(errors, []);
+  assert.equal(report.personas.length, 8);
+  assert.deepEqual(report.personas.map((p) => p.id).slice(0, 2), ['rage', 'rage-2']);
+  for (const k of ['crawl', 'abandonForm']) assert.ok(kinds.has(k), `move ${k} never ran; got ${[...kinds].join(', ')}`);
+  assert.ok(report.issues.length >= 8);
 });

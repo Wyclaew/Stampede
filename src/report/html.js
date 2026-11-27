@@ -92,6 +92,21 @@ function issueCard(issue, report) {
   </article>`;
 }
 
+function aiSection(report) {
+  const ai = report.ai;
+  if (!ai || !ai.enabled || (!ai.summary && !ai.plan)) return '';
+  const s = ai.summary;
+  const causes = s ? s.rootCauses.map((r) => `<li><b>${esc(r.title)}</b> ${esc(r.detail)}${r.issues && r.issues.length ? ` <span class="ids">${r.issues.map(esc).join(', ')}</span>` : ''}</li>`).join('') : '';
+  const fixes = s ? s.fixes.map((f) => `<li><b>${esc(f.title)}</b> ${esc(f.detail)}</li>`).join('') : '';
+  const plan = ai.plan ? ai.plan.steps.map((st) => `<li><code>${esc(st.by || st.persona)}</code> ${esc(st.kind)}${st.target ? ` · “${esc(st.target)}”` : ''} <span class="ids">${esc(st.status)}</span><br><small>${esc(st.reason)}</small></li>`).join('') : '';
+  return `<h2>AI özeti <small class="model">${esc((s && s.model) || (ai.plan && ai.plan.model) || '')}</small></h2>
+<section class="ai">
+  ${s ? `<p class="headline">${esc(s.headline)}</p><div class="cols"><div><h4>Kök nedenler</h4><ol>${causes}</ol></div><div><h4>Öncelikli düzeltmeler</h4><ol>${fixes}</ol></div></div>` : ''}
+  ${plan ? `<details><summary>Saldırı planı (${ai.plan.steps.length} adım): ${esc(ai.plan.summary)}</summary><ol>${plan}</ol></details>` : ''}
+  <p class="meta">Model çıktısıdır; bulgular kanıtlarıyla birlikte aşağıda.${ai.errors && ai.errors.length ? ` Uyarılar: ${ai.errors.map(esc).join(' · ')}` : ''}</p>
+</section>`;
+}
+
 export function renderHtml(report) {
   const c = report.counts;
   const cats = (report.categories || [])
@@ -154,6 +169,7 @@ details{margin-top:14px}summary{cursor:pointer;font-weight:700;font-size:14px}
 pre{margin:8px 0 0;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:auto;font:13px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word}
 .copy{float:right;margin-top:6px;padding:5px 12px;border:1px solid var(--ink);border-radius:6px;background:var(--ink);color:var(--paper);font:600 13px var(--sans);cursor:pointer}
 .clean{padding:32px;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:18px}
+section.ai{padding:20px 24px;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px}.headline{font-size:18px;font-weight:600;margin-bottom:8px}.ids{font:12px var(--mono);color:var(--muted)}.model{font:500 13px var(--mono);color:var(--muted)}
 footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
 @media(max-width:760px){.summary,.cols{grid-template-columns:1fr}.cats li{grid-template-columns:120px 1fr 36px}h1{font-size:30px}.score b{font-size:64px}}
 @media print{.copy{display:none}details{display:block}details>summary{list-style:none}}
@@ -171,6 +187,8 @@ footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);color:v
   </div>
   <ul class="cats">${cats}</ul>
 </section>
+
+${aiSection(report)}
 
 ${personas ? `<h2>Sürü</h2><table><thead><tr><th></th><th>Ajan</th><th class="num">Hamle</th><th class="num">Sorun</th></tr></thead><tbody>${personas}</tbody></table>` : ''}
 

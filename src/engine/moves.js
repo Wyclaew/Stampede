@@ -1,6 +1,6 @@
 // Registry of every move an agent can make (kind -> implementation).
 import { backForward, chaosType, keyMash, navigate, offlineFlap, pickOption, rageClick, reloadSpam, scrollFrenzy, viewportShake } from './actions.js';
-import { escapeSpam, hiddenTamper, idTamper, keyActivate, login, offlineBurst, rotate, sleepWake, slowNet, storageCorrupt, storageFlood, tabWalk, twinTab } from './actions-extra.js';
+import { abandonForm, crawl, escapeSpam, hiddenTamper, idTamper, keyActivate, login, offlineBurst, rotate, sleepWake, slowNet, storageCorrupt, storageFlood, tabWalk, twinTab } from './actions-extra.js';
 
 export const MOVES = Object.freeze({
   rageClick,
@@ -26,6 +26,8 @@ export const MOVES = Object.freeze({
   offlineBurst,
   twinTab,
   slowNet,
+  abandonForm,
+  crawl,
 });
 
 /** Short, human label for a planned move (shown in the dashboard and the brain graph). */
@@ -53,4 +55,7 @@ export const MOVE_LABEL = Object.freeze({
   offlineBurst: 'Öderken bağlantı kopsun',
   twinTab: 'İkinci sekme çakışması',
   slowNet: 'Yavaş 3G',
+  abandonForm: 'Formu yarıda bırak',
+  crawl: 'Hızlı tarama',
+  aiPlan: 'AI planı',
 });

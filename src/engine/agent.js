@@ -6,7 +6,7 @@ import { isMutationMethod, isTelemetryUrl } from './safety.js';
 import { createRng } from './rng.js';
 import { decide, normalizeVisitKey, withMemoryDefaults } from './strategy.js';
 import { MOVES, MOVE_LABEL } from './moves.js';
-import { discoverElements, ghostSay, ghostScan, runProbes } from './inject/probes.js';
+import { discoverElements, ghostSay, ghostScan, runProbes, storageChaos } from './inject/probes.js';
 import { normalizeMessage, normalizePath } from './issues.js';
 import { findSecretInText, probeToIssues, sensitiveKeys, trackDomGrowth } from './detectors.js';
 import { XSS_MARKER } from './inputs.js';
@@ -15,6 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const OVERLAY_SOURCE = readFileSync(join(here, 'inject', 'overlay.js'), 'utf8');
 
 const DUPLICATE_WINDOW_MS = 2500;
+const WINDOW_CHROME_PX = 92; // title bar + tab strip + toolbar of a headed Chrome window
 const SLOW_REQUEST_MS = 3000;
 const BACKGROUND_PROBE_MS = 1500;
 const ACTION_TIMEOUT_MS = 14000;
@@ -49,10 +50,11 @@ export function shortUrl(url) {
 }
 
 export class Agent {
-  constructor(session, persona, index) {
+  constructor(session, slot, index) {
     this.session = session;
-    this.persona = persona;
-    this.id = persona.id;
+    this.slot = slot;
+    this.persona = slot.persona;
+    this.id = slot.id;
     this.mode = session.mode;
     this.origin = session.origin;
     this.rng = createRng(session.config.seed + index * 7919);
@@ -81,14 +83,32 @@ export class Agent {
     return normalizeVisitKey(this.page.url());
   }
 
-  async start(browser) {
-    this.context = await browser.newContext({ ...this.persona.context, ignoreHTTPSErrors: true, locale: 'tr-TR' });
-    const agentInfo = JSON.stringify({ code: this.persona.code, tag: this.persona.tag, color: this.persona.color });
+  /** Context options; in headed mode the viewport follows the window tile the agent is placed in. */
+  contextOptions(tile) {
+    const base = { ...this.persona.context, ignoreHTTPSErrors: true, locale: 'tr-TR' };
+    if (!tile) return base;
+    const height = Math.max(320, tile.height - WINDOW_CHROME_PX);
+    const width = this.persona.touch ? Math.min(390, tile.width - 16) : Math.max(320, tile.width - 16);
+    return { ...base, viewport: { width, height } };
+  }
+
+  async placeWindow(tile) {
+    if (!tile || !this.cdp) return;
+    const win = await quiet(this.cdp.send('Browser.getWindowForTarget'));
+    if (!win) return;
+    await quiet(this.cdp.send('Browser.setWindowBounds', { windowId: win.windowId, bounds: { windowState: 'normal' } }));
+    await quiet(this.cdp.send('Browser.setWindowBounds', { windowId: win.windowId, bounds: { left: tile.left, top: tile.top, width: tile.width, height: tile.height } }));
+  }
+
+  async start(browser, tile = null) {
+    this.context = await browser.newContext(this.contextOptions(tile));
+    const agentInfo = JSON.stringify({ code: this.slot.code, tag: this.slot.tag, color: this.slot.color });
     await this.context.addInitScript({ content: `window.__STAMPEDE_AGENT=${agentInfo};\n${OVERLAY_SOURCE}` });
     await this.context.route('**/*', (route) => this.guardRoute(route));
     this.page = await this.context.newPage();
     this.attachMonitors(this.page);
     await this.startScreencast();
+    await this.placeWindow(tile);
     const res = await this.page.goto(this.session.config.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     if (!res) throw new Error('Sayfa yanıt vermedi.');
     await quiet(this.page.waitForLoadState('load', { timeout: 6000 }));
@@ -96,8 +116,9 @@ export class Agent {
     this.memory.visited.add(normalizeVisitKey(this.lastGoodUrl));
     await sleep(500); // overlay mounts shortly after load
     const vp = this.page.viewportSize() || { width: 1280, height: 800 };
+    await quiet(this.page.evaluate(({ x, y }) => window.__stampede && window.__stampede.moveTo(x, y, 1), { x: vp.width / 2, y: vp.height / 2 }));
     if (!this.persona.touch) await quiet(this.page.mouse.move(vp.width / 2, vp.height / 2));
-    await quiet(this.page.evaluate(ghostSay, { text: `${this.persona.code} ${this.persona.label.toUpperCase()} BAŞLADI` }));
+    await quiet(this.page.evaluate(ghostSay, { text: `${this.slot.code} ${this.slot.label.toUpperCase()} BAŞLADI` }));
   }
 
   /** Network-layer safety net: off-origin navigations are blocked; in Safe mode every mutation is blocked. */
@@ -402,11 +423,26 @@ export class Agent {
         lastEmit = now;
         this.emit('frame', { data, width: metadata.deviceWidth, height: metadata.deviceHeight });
       });
-      await this.cdp.send('Page.startScreencast', { format: 'jpeg', quality: 50, maxWidth: 960, maxHeight: 960, everyNthFrame: 1 });
-      if (this.mode.cpuThrottle > 1) await this.cdp.send('Emulation.setCPUThrottlingRate', { rate: this.mode.cpuThrottle });
+      await this.applyStreamQuality(this.session.focusAgent === this.id);
+      const cpu = Math.max(this.mode.cpuThrottle, this.persona.slowDevice ? 4 : 1);
+      if (cpu > 1) await this.cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu });
+      if (this.persona.slowDevice) {
+        await this.cdp.send('Network.enable');
+        await this.cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 300, downloadThroughput: 90 * 1024, uploadThroughput: 40 * 1024 });
+      }
     } catch {
       this.cdp = null; // live view is optional; the run continues without it
     }
+  }
+
+  /** Focused agent streams sharper frames; the rest stay small and cheap. */
+  async applyStreamQuality(focused) {
+    if (!this.cdp) return;
+    const q = focused ? { quality: 55, maxWidth: 1100, maxHeight: 1100 } : { quality: 40, maxWidth: 640, maxHeight: 640 };
+    if (this.streamFocused === focused) return;
+    this.streamFocused = focused;
+    await quiet(this.cdp.send('Page.stopScreencast'));
+    await quiet(this.cdp.send('Page.startScreencast', { format: 'jpeg', everyNthFrame: 1, ...q }));
   }
 
   /** Frames around an incident: ~2 s before, the press, and (added later) the moment of detection. */
@@ -474,7 +510,8 @@ export class Agent {
           continue;
         }
         const elements = this.memory.visited.size >= this.mode.maxPages ? snap.elements.filter((e) => e.tag !== 'a') : snap.elements;
-        const { choice, ranked } = decide({ elements, snapshot: snap, mode: this.mode, origin: this.origin, memory: this.memory, pageKey, persona: this.persona }, this.rng);
+        const aiHints = this.session.aiHintsFor(this);
+        const { choice, ranked } = decide({ elements, snapshot: snap, mode: this.mode, origin: this.origin, memory: this.memory, pageKey, persona: this.persona, aiHints }, this.rng);
         if (!choice) {
           await sleep(300);
           continue;
@@ -491,7 +528,8 @@ export class Agent {
         }
         this.memory.visited.add(nowKey);
         await this.probe(choice.kind);
-        await sleep(this.rng.int(this.mode.paceMs[0], this.mode.paceMs[1]));
+        const pace = this.persona.fastPace ? 0.3 : this.persona.slowDevice ? 1.8 : 1;
+        await sleep(this.rng.int(this.mode.paceMs[0], this.mode.paceMs[1]) * pace);
       }
     } finally {
       clearInterval(bg);
@@ -512,7 +550,7 @@ export class Agent {
     this.emit('decision', {
       seq: this.counters.actions + 1,
       zones,
-      candidates: top.map((c) => ({ kind: c.kind, label: this.candidateLabel(c), zone: c.zone || 'page', p: Number(c.p.toFixed(3)), chosen: c === choice })),
+      candidates: top.map((c) => ({ kind: c.kind, label: this.candidateLabel(c), zone: c.zone || 'page', p: Number(c.p.toFixed(3)), chosen: c === choice, ai: c.ai !== undefined })),
       considered: ranked.length,
     });
     const targets = top.filter((c) => c.el).slice(0, 6).map((c) => ({ id: c.el.id, p: c.p, pick: c === choice }));
@@ -537,11 +575,12 @@ export class Agent {
       memory: this.memory,
       counters: this.counters,
       credentials: this.session.credentials,
-      agentCode: this.persona.code,
+      agentCode: this.slot.code,
       probe: (r) => this.probe(r),
       report: (p) => this.report(p),
       pageKey: () => this.pageKey(),
       openTwin: () => this.openTwin(),
+      authEvent: (text) => this.session.pushAnomaly(this.id, 'auth', `${this.slot.code} ${text}`),
       setOfflineWindow: (ms) => {
         this.offlineUntil = Date.now() + ms;
       },
@@ -556,6 +595,8 @@ export class Agent {
     if (cand.kind === 'offline') this.offlineUntil = Date.now() + 2500;
     const jsErrorsBefore = this.counters.jsErrors;
     const step = await withTimeout(quiet(MOVES[cand.kind](ctx, cand)), ACTION_TIMEOUT_MS);
+    await this.restoreTransientChaos();
+    if (cand.ai !== undefined) this.session.completeAiStep(cand.ai, this, Boolean(step));
     this.counters.actions = seq;
     this.memory.lastKind = cand.kind;
     const priorHits = cand.hitKey ? this.memory.hits.get(cand.hitKey) || 0 : 0;
@@ -567,7 +608,7 @@ export class Agent {
     // Copy/share/print buttons act outside the DOM (clipboard, OS sheet), so silence is expected.
     if (step && step.dead && cand.el && SIDE_EFFECT_ONLY.test(`${cand.el.text} ${cand.el.ariaLabel}`)) step.dead = false;
     if (step) {
-      const record = { seq, agent: this.id, code: this.persona.code, at: Date.now(), ...step };
+      const record = { seq, agent: this.id, code: this.slot.code, at: Date.now(), ...step };
       this.log.push(record);
       this.session.recordAction(record);
       this.emit('action', { seq, kind: cand.kind, label: step.label, phase: 'done', at: record.at });
@@ -593,7 +634,24 @@ export class Agent {
     this.currentAction = null;
   }
 
+  /** Network drops, slow links and throttles are temporary: undo them after every move, even if it timed out. */
+  async restoreTransientChaos() {
+    await quiet(this.context.setOffline(false));
+    if (this.cdp && !this.persona.slowDevice) {
+      await quiet(this.cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }));
+    }
+  }
+
+  /** Put corrupted/flooded storage back before the agent's browser context is thrown away. */
+  async restoreStorage() {
+    for (const p of this.context ? this.context.pages() : []) {
+      await quiet(p.evaluate(storageChaos, 'restore'));
+      await quiet(p.evaluate(storageChaos, 'unflood'));
+    }
+  }
+
   async close() {
+    await this.restoreStorage();
     try {
       if (this.cdp) await quiet(this.cdp.send('Page.stopScreencast'));
       if (this.context) await quiet(this.context.close());

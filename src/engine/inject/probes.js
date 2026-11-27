@@ -87,6 +87,10 @@ export function discoverElements() {
       idField: tag(idField),
       passwords: pws.map(tag),
       submit: tag(submit),
+      loginBtn: tag(loginBtn),
+      signupBtn: tag(signupBtn),
+      signupText: signupBtn ? (signupBtn.innerText || signupBtn.value || '').trim().slice(0, 40) : '',
+      loginText: loginBtn ? (loginBtn.innerText || loginBtn.value || '').trim().slice(0, 40) : '',
       submitText: submit ? (submit.innerText || submit.value || '').trim().slice(0, 40) : '',
       extra: [...scope.querySelectorAll('input[required]:not([type=password]):not([type=email]):not([type=checkbox]):not([type=hidden])')].filter((n) => n !== idField).map(tag).slice(0, 4),
       terms: [...scope.querySelectorAll('input[type=checkbox][required]')].map(tag).slice(0, 2),
@@ -414,4 +418,14 @@ export function ghostSay({ text, kind }) {
 
 export function ghostScan({ targets }) {
   if (window.__stampede) window.__stampede.scan(targets);
+}
+
+/** What the page says after an auth attempt (status/alert/error text) and whether the form is still up. */
+export function authOutcome() {
+  const msgs = [...document.querySelectorAll('[role=status],[role=alert],[aria-live],.error,.alert,[class*="error"],[class*="message"],[class*="msg"]')]
+    .filter((n) => !n.closest('[data-stampede]'))
+    .map((n) => (n.innerText || '').trim())
+    .filter((t) => t && t.length < 160);
+  const pw = [...document.querySelectorAll('input[type=password]')].some((p) => p.getBoundingClientRect().width > 4);
+  return { message: [...new Set(msgs)].slice(0, 2).join(' · '), passwordVisible: pw, url: location.href };
 }

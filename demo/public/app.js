@@ -315,7 +315,7 @@
     });
   }
 
-  document.getElementById('chat').addEventListener('click', function () { toast('Destek ekibimiz şu an çevrimdışı ☕'); });
+  document.getElementById('chat').addEventListener('click', function () { toast('Destek ekibimiz şu an çevrimdışı'); });
 
   // ---- boot ----
   api('/api/products').then(function (list) {

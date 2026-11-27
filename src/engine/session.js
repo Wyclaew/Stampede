@@ -7,8 +7,12 @@ import { randomSeed } from './rng.js';
 import { IssueStore, categoryScores, resilienceScore, scoreGrade } from './issues.js';
 import { auditCookies } from './detectors.js';
 import { markElement, ghostSay } from './inject/probes.js';
-import { resolvePersonas } from './personas.js';
+import { buildRoster } from './personas.js';
 import { Agent } from './agent.js';
+import { getScreen, parkCursor, tileLayout } from '../util/desktop.js';
+import { aiEnabled, planAttack, reviewScreenshot, summarizeIssues } from '../ai/gemini.js';
+import { classifyElement, zoneOf } from './safety.js';
+import { discoverElements } from './inject/probes.js';
 
 const MAX_SCREENSHOTS = 40;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -40,8 +44,8 @@ export class StampedeSession extends EventEmitter {
     assertRunAllowed({ url: merged.url, modeId: merged.mode, confirmLive: merged.confirmLive });
     const durationSec = Math.min(Math.max(Number(merged.durationSec) || DEFAULTS.durationSec, 5), 900);
     const seed = Number(merged.seed) || randomSeed();
-    this.personas = resolvePersonas(merged.personas);
-    this.config = Object.freeze({ ...merged, durationSec, seed, credentials: undefined, personas: this.personas.map((p) => p.id) });
+    this.roster = buildRoster(merged.personas);
+    this.config = Object.freeze({ ...merged, durationSec, seed, credentials: undefined, personas: this.roster.map((r) => r.persona.id) });
     this.credentials = resolveCredentials(merged.credentials, seed);
     this.mode = getMode(this.config.mode);
     this.origin = new URL(this.config.url).origin;
@@ -50,11 +54,13 @@ export class StampedeSession extends EventEmitter {
     this.actionLog = [];
     this.anomalies = [];
     this.agents = [];
-    this.focusAgent = this.personas[0].id;
+    this.focusAgent = this.roster[0].id;
     this.stopping = false;
     this.shots = 0;
     this.shotQueue = Promise.resolve();
     this.phase = 'idle';
+    this.aiOn = merged.ai !== false && aiEnabled();
+    this.ai = { enabled: this.aiOn, plan: null, summary: null, visual: [], errors: [] };
   }
 
   stop() {
@@ -62,7 +68,9 @@ export class StampedeSession extends EventEmitter {
   }
 
   setFocus(agentId) {
-    if (this.personas.some((p) => p.id === agentId)) this.focusAgent = agentId;
+    if (!this.roster.some((r) => r.id === agentId)) return;
+    this.focusAgent = agentId;
+    for (const a of this.agents) a.applyStreamQuality(a.id === agentId).catch(() => null);
   }
 
   /** Replace any occurrence of the test password with a mask. */
@@ -118,9 +126,14 @@ export class StampedeSession extends EventEmitter {
     try {
       this.setPhase('launching', 'Tarayıcı başlatılıyor');
       this.browser = await launchBrowser({ headed: this.config.headed });
-      this.agents = this.personas.map((p, i) => new Agent(this, p, i));
+      this.agents = this.roster.map((slot, i) => new Agent(this, slot, i));
       this.setPhase('loading', `${this.agents.length} ajan sayfayı açıyor`);
-      await Promise.all(this.agents.map((a) => a.start(this.browser)));
+      const screen = this.config.headed ? await getScreen() : null;
+      const tiles = screen ? tileLayout(this.agents.length, screen) : [];
+      await Promise.all(this.agents.map((a, i) => a.start(this.browser, tiles[i] || null)));
+      // Keep the human's pointer off the agent windows: a hovering mouse would interfere with them.
+      if (screen) await parkCursor(screen);
+      if (this.aiOn) this.planPromise = this.runPlanner();
       this.setPhase('running', 'Sürü saldırıyor');
       const deadline = this.startedAt + this.config.durationSec * 1000;
       const statsTimer = setInterval(() => this.emit('stats', this.snapshot()), 500);
@@ -159,8 +172,8 @@ export class StampedeSession extends EventEmitter {
       trigger: agent.currentAction ? agent.currentAction.label : agent.counters.actions ? 'arka plan kontrolü' : 'sayfa yüklenirken',
       ...defined,
       agent: agent.id,
-      agentCode: agent.persona.code,
-      agentLabel: agent.persona.label,
+      agentCode: agent.slot.code,
+      agentLabel: agent.slot.label,
       detectedAt: Date.now(),
     };
     const { issue, isNew } = this.issues.add(enriched);
@@ -188,10 +201,98 @@ export class StampedeSession extends EventEmitter {
     });
   }
 
+  // ---------- optional AI (Gemini) ----------
+
+  aiError(stage, err) {
+    const message = `${stage}: ${err && err.message ? err.message : err}`;
+    this.ai.errors.push(message);
+    this.pushAnomaly(this.roster[0].id, 'ai', `AI ${message}`);
+  }
+
+  /** One planner call with a compact view of the first agent's page; agents keep running meanwhile. */
+  async runPlanner() {
+    try {
+      const first = this.agents[0];
+      const snap = await first.page.evaluate(discoverElements);
+      const page = {
+        url: snap.url,
+        title: snap.title,
+        hasLoginForm: Boolean(snap.auth),
+        elements: snap.elements.slice(0, 70).map((e) => {
+          const cls = classifyElement(e, this.origin);
+          return { text: e.text, tag: e.tag, type: e.type, zone: zoneOf(e, cls), category: cls.category };
+        }),
+      };
+      const kinds = new Map();
+      for (const r of this.roster) kinds.set(r.persona.id, { id: r.persona.id, label: r.persona.label, moves: r.persona.allow.filter((k) => k !== 'offline') });
+      const plan = await planAttack({ page, personas: [...kinds.values()] });
+      this.ai.plan = { ...plan, steps: plan.steps.map((s, index) => ({ ...s, index, status: 'pending', by: null })) };
+      this.emit('aiplan', this.ai.plan);
+      this.pushAnomaly(this.roster[0].id, 'ai', `AI planı hazır: ${plan.steps.length} adım (${plan.model})`);
+    } catch (err) {
+      this.aiError('planlayıcı', err);
+    }
+  }
+
+  aiHintsFor(agent) {
+    if (!this.ai.plan) return null;
+    return this.ai.plan.steps.filter((s) => s.status === 'pending' && s.persona === agent.persona.id);
+  }
+
+  completeAiStep(index, agent, ok) {
+    const step = this.ai.plan && this.ai.plan.steps[index];
+    if (!step || step.status !== 'pending') return;
+    step.status = ok ? 'done' : 'skipped';
+    step.by = agent.slot.code;
+    this.emit('aiplan', this.ai.plan);
+  }
+
+  async runAiReview() {
+    this.setPhase('finishing', 'AI görsel inceleme');
+    const shots = await Promise.all(
+      this.agents.slice(0, 4).map(async (a) => {
+        if (!a.page || a.page.isClosed()) return null;
+        const buf = await quiet(a.page.screenshot({ type: 'jpeg', quality: 60, timeout: 3000 }));
+        return buf ? { agent: a, data: buf.toString('base64'), url: a.page.url(), viewport: a.page.viewportSize() } : null;
+      }),
+    );
+    const results = await Promise.allSettled(shots.filter(Boolean).map((s) => reviewScreenshot({ jpegBase64: s.data, url: s.url, viewport: s.viewport }).then((r) => ({ ...r, shot: s }))));
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        this.aiError('görsel inceleme', r.reason);
+        continue;
+      }
+      const { findings, shot } = r.value;
+      this.ai.visual.push({ agent: shot.agent.slot.code, url: shot.url, findings });
+      for (const f of findings) {
+        this.addIssue(shot.agent, {
+          type: 'ai-visual',
+          severity: f.severity,
+          fingerprint: `ai-visual|${f.title}`,
+          detail: `${f.title}: ${f.detail}`,
+          evidence: [`Gemini görsel inceleme · ${shot.url} · ${shot.viewport ? `${shot.viewport.width}×${shot.viewport.height}` : ''}`],
+          trigger: 'AI görsel inceleme',
+        });
+      }
+    }
+    await quiet(this.shotQueue);
+    this.setPhase('finishing', 'AI kök neden özeti');
+    try {
+      const issues = this.issues.list();
+      if (issues.length) this.ai.summary = await summarizeIssues({ target: this.config.url, issues });
+    } catch (err) {
+      this.aiError('özet', err);
+    }
+  }
+
   async finish() {
     this.setPhase('finishing', 'Rapor hazırlanıyor');
     await sleep(1200); // let in-flight requests land
     await Promise.all(this.agents.map((a) => a.probe('bitiş')));
+    if (this.aiOn) {
+      await quiet(Promise.resolve(this.planPromise));
+      await this.runAiReview();
+    }
     for (const a of this.agents) {
       const cookies = (await quiet(a.context.cookies())) || [];
       for (const draft of auditCookies(cookies, this.config.url)) this.addIssue(a, draft);
@@ -215,7 +316,7 @@ export class StampedeSession extends EventEmitter {
       origin: this.origin,
       mode: { id: this.mode.id, label: this.mode.label },
       seed: this.config.seed,
-      personas: this.personas.map((p) => ({ id: p.id, code: p.code, label: p.label, color: p.color, summary: p.summary, actions: (byAgent[p.id] || []).length, issues: this.issueCountFor(p.id) })),
+      personas: this.roster.map((r) => ({ id: r.id, persona: r.persona.id, code: r.code, label: r.label, color: r.color, summary: r.persona.summary, actions: (byAgent[r.id] || []).length, issues: this.issueCountFor(r.id) })),
       identity: { email: this.credentials.email, password: '••••••', generated: this.credentials.generated },
       startedAt: this.startedAt,
       finishedAt: Date.now(),
@@ -225,6 +326,7 @@ export class StampedeSession extends EventEmitter {
       score: snap.score,
       grade: snap.grade,
       categories: categoryScores(issues),
+      ai: this.ai,
       issues,
       actions: this.actionLog,
       anomalies: this.anomalies.slice(-150),

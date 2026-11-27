@@ -98,6 +98,16 @@ function stepCode(step) {
       }
       return lines;
     }
+    case 'abandonForm':
+      return [
+        c,
+        `  await ${loc}.fill(${js(step.value)});`,
+        step.linkLocator ? `  await ${step.linkLocator}.click();` : '',
+        `  await page.goBack();`,
+        `  await expect(${loc}).toHaveValue(${js(step.value)});`,
+      ].filter(Boolean);
+    case 'crawl':
+      return [c, ...(step.urls || []).map((u) => `  await page.goto(${js(u)}, { waitUntil: 'commit' }).catch(() => {});`)];
     case 'twinTab':
       return [
         c,

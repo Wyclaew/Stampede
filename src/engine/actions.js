@@ -21,9 +21,12 @@ async function say(page, text, kind) {
   await quiet(page.evaluate(ghostSay, { text, kind }));
 }
 
+/** Ease the visible agent cursor to (x, y) and move the real pointer along with it. */
 export async function glideTo(ctx, x, y) {
-  if (ctx.persona && ctx.persona.touch) return; // fingers do not hover
-  await ctx.page.mouse.move(x, y, { steps: ctx.rng.int(6, 12) });
+  const visual = quiet(ctx.page.evaluate(({ x, y }) => (window.__stampede ? window.__stampede.moveTo(x, y) : 0), { x, y }));
+  if (!(ctx.persona && ctx.persona.touch)) await quiet(ctx.page.mouse.move(x, y, { steps: ctx.rng.int(6, 12) })); // fingers do not hover
+  const ms = (await visual) || 0;
+  await sleep(Math.min(Math.max(ms - 40, 0), 650));
 }
 
 export async function pointFor(ctx, el) {
@@ -33,6 +36,7 @@ export async function pointFor(ctx, el) {
 }
 
 export async function press(ctx, x, y) {
+  await quiet(ctx.page.evaluate(({ x, y }) => window.__stampede && window.__stampede.press(x, y), { x, y }));
   if (ctx.persona && ctx.persona.touch) {
     await quiet(ctx.page.touchscreen.tap(x, y));
   } else {
@@ -85,9 +89,11 @@ export async function rageClick(ctx, cand) {
   await say(page, `${verb} ×${count}${el.text ? `  ${el.text.slice(0, 26)}` : ''}`);
   const before = await quiet(page.evaluate(readCounters));
   const reqBefore = ctx.counters.requests;
+  // A user on a slow device waits a moment, sees nothing happen, and presses again.
+  const gap = persona && persona.hesitantClicks ? [700, 1200] : [25, 85];
   for (let i = 0; i < count; i++) {
     await press(ctx, pt.x, pt.y);
-    await sleep(rng.int(25, 85));
+    await sleep(rng.int(gap[0], gap[1]));
   }
   await sleep(650);
   const reacted = await didReact(ctx, before, reqBefore);

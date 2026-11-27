@@ -40,6 +40,8 @@ const EVERY_STEP = [
   step({ seq: 14, kind: 'twinTab', twinLocator: "page.getByRole('button', { name: 'Öde' }).first()" }),
   step({ seq: 15, kind: 'rageClick', squeezeTo: [{ width: 375, height: 667 }] }),
   step({ seq: 16, kind: 'escapeSpam', keys: ['Escape'] }),
+  step({ seq: 17, kind: 'abandonForm', value: 'Yarım', linkLocator: "page.getByRole('link', { name: 'Kasa' }).first()" }),
+  step({ seq: 18, kind: 'crawl', urls: ['http://localhost:7500/a', 'http://localhost:7500/b'] }),
 ];
 
 test('generated Playwright repro is valid TypeScript for every issue type and move', () => {
@@ -76,7 +78,10 @@ test('locators prefer stable, human-readable selectors', () => {
 });
 
 test('run request validation at the API boundary', () => {
-  assert.deepEqual(parseRunRequest({ url: 'http://localhost:7500', mode: 'chaos', durationSec: 30 }), { url: 'http://localhost:7500', mode: 'chaos', durationSec: 30, seed: undefined, headed: false, confirmLive: false, personas: ['rage'], credentials: undefined });
+  assert.deepEqual(parseRunRequest({ url: 'http://localhost:7500', mode: 'chaos', durationSec: 30 }), { url: 'http://localhost:7500', mode: 'chaos', durationSec: 30, seed: undefined, headed: false, confirmLive: false, personas: ['rage'], credentials: undefined, resetDemo: true, ai: true });
+  assert.throws(() => parseRunRequest({ url: 'http://x', personas: ['rage', 'rage', 'rage', 'rage'] }), /en fazla 3/);
+  assert.throws(() => parseRunRequest({ url: 'http://x', personas: ['rage', 'rage', 'keyboard', 'keyboard', 'mobile', 'mobile', 'snoop', 'snoop', 'bot'] }), /en fazla 8/);
+  assert.equal(parseRunRequest({ url: 'http://x', ai: false, resetDemo: false }).ai, false);
   assert.deepEqual(parseRunRequest({ url: 'http://x', personas: ['rage', 'snoop'], credentials: { email: 'qa@x.test', password: 'pw123456' } }).credentials, { email: 'qa@x.test', password: 'pw123456' });
   assert.throws(() => parseRunRequest({ url: 'http://x', personas: ['ninja'] }), /personas/);
   assert.throws(() => parseRunRequest({ url: 'http://x', personas: [] }), /personas/);
@@ -94,6 +99,8 @@ test('CLI argument parsing', () => {
   assert.equal(o.seed, 9);
   assert.equal(o.failOn, 'high');
   assert.deepEqual(parseArgs(['run', 'http://x', '--personas', 'all']).personas, ['rage', 'keyboard', 'mobile', 'snoop']);
+  assert.equal(parseArgs(['run', 'http://x', '--personas', 'every']).personas.length, 7);
+  assert.equal(parseArgs(['run', 'http://x', '--no-ai']).ai, false);
   assert.deepEqual(parseArgs(['run', 'http://x', '--personas', 'rage,snoop', '--email', 'a@b.c']).personas, ['rage', 'snoop']);
   assert.throws(() => parseArgs(['run', 'http://x', '--wat']), /Bilinmeyen/);
   assert.throws(() => parseArgs(['run', 'http://x', '--fail-on', 'meh']), /fail-on/);
